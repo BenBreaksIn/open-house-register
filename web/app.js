@@ -122,15 +122,22 @@ function input(name, label, value = "", options = {}) {
 function optional(label) {
   return `${label} <span class="optional">(optional)</span>`;
 }
+function contactIdentity(name, imageUrl, kind) {
+  if (!name && !imageUrl) return "";
+  const fallback = kind === "agent-photo" ? "Agent photo" : "Brokerage logo";
+  return `<div class="contact-identity">${imageUrl ? `<img class="contact-image ${kind}" src="${esc(imageUrl)}" alt="${name ? "" : fallback}" width="48" height="48" referrerpolicy="no-referrer">` : ""}${name ? `<h3>${esc(name)}</h3>` : ""}</div>`;
+}
 function contact(s) {
   const agent = !!(
     s.host_name ||
+    s.agent_photo_url ||
     s.agent_license ||
     s.agent_phone ||
     s.contact_email
   );
   const broker = !!(
     s.business_name ||
+    s.logo_url ||
     s.broker_name ||
     s.broker_license ||
     s.broker_phone ||
@@ -139,7 +146,7 @@ function contact(s) {
   if (!agent && !broker) return "";
   const links = (email, phone) =>
     `<div class="contact-links">${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : ""}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ""))}">${esc(phone)}</a>` : ""}</div>`;
-  return `<footer class="host-contact">${agent ? `<div class="agent"><span class="eyebrow">Your host</span>${s.host_name ? `<h3>${esc(s.host_name)}</h3>` : ""}${s.agent_license ? `<p>Agent license: ${esc(s.agent_license)}</p>` : ""}${links(s.contact_email, s.agent_phone)}</div>` : ""}${broker ? `<div class="${agent ? "broker" : ""}">${s.business_name ? `<h3>${esc(s.business_name)}</h3>` : ""}${s.broker_name ? `<p>Broker: ${esc(s.broker_name)}</p>` : ""}${s.broker_license ? `<p>Broker license: ${esc(s.broker_license)}</p>` : ""}${links(s.broker_email, s.broker_phone)}</div>` : ""}</footer>`;
+  return `<footer class="host-contact">${agent ? `<div class="agent"><span class="eyebrow">Your host</span>${contactIdentity(s.host_name, s.agent_photo_url, "agent-photo")}${s.agent_license ? `<p>Agent license: ${esc(s.agent_license)}</p>` : ""}${links(s.contact_email, s.agent_phone)}</div>` : ""}${broker ? `<div class="${agent ? "broker" : ""}">${contactIdentity(s.business_name, s.logo_url, "brokerage-logo")}${s.broker_name ? `<p>Broker: ${esc(s.broker_name)}</p>` : ""}${s.broker_license ? `<p>Broker license: ${esc(s.broker_license)}</p>` : ""}${links(s.broker_email, s.broker_phone)}</div>` : ""}</footer>`;
 }
 function guestForm(s, preview = false, shared = false) {
   const prefix = preview ? "preview-" : "";
@@ -159,7 +166,7 @@ function propertyTitle(h, s) {
   return `<div class="property-title"><h1>${esc(h.address)}</h1>${s.show_location && h.location ? `<p class="property-location">${esc(h.location)}</p>` : ""}</div>`;
 }
 function guestHeader(h, s) {
-  return `${h.photo_url ? `<img class="guest-photo" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : ""}<div class="guest-main">${s.logo_url ? `<img class="guest-logo" src="${esc(s.logo_url)}" alt="${esc(s.business_name || "Host logo")}">` : ""}<p class="guest-kicker">Welcome to</p>${propertyTitle(h, s)}<p class="date">${esc(dateLabel(h))}</p>${s.welcome ? `<p class="guest-welcome">${esc(s.welcome)}</p>` : "<hr>"}`;
+  return `${h.photo_url ? `<img class="guest-photo" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : ""}<div class="guest-main"><p class="guest-kicker">Welcome to</p>${propertyTitle(h, s)}<p class="date">${esc(dateLabel(h))}</p>${s.welcome ? `<p class="guest-welcome">${esc(s.welcome)}</p>` : "<hr>"}`;
 }
 async function loadGuest(id, print = false, shared = false) {
   try {
@@ -253,7 +260,7 @@ function customize() {
   const toggle = (name, label) =>
     `<label class="choice"><input type="checkbox" role="switch" name="${name}" ${s[name] ? "checked" : ""}>${label}</label>`;
   return shell(
-    `<header class="heading"><div><h1>Make yourself at home.</h1><p class="sub">Your name. Your colors. Your welcome.</p></div></header><div class="customize-layout"><form id="settings-form"><section class="form-section"><h2>Your brand</h2><p class="muted">Every field is optional. Empty details stay hidden from visitors.</p><div class="pair">${field("business_name", "Brokerage name")}${field("logo_url", "Logo URL", "url", 2048)}</div><label for="color">Brand color</label><div class="color-options">${["#214d3b", "#24405f", "#a1442c", "#30312e"].map((c) => `<button class="swatch" type="button" style="--swatch:${c}" data-action="color" data-color="${c}" aria-label="Use ${c}" aria-pressed="${s.color.toLowerCase() === c}"></button>`).join("")}<input type="color" name="color" id="color" value="${esc(s.color)}" aria-label="Custom brand color"></div></section><section class="form-section"><h2>Your contact details</h2><p class="muted">Give visitors a way to reach you after they stop by.</p><div class="pair">${field("host_name", "Agent name")}${field("agent_license", "Agent license number", "text", 64)}</div><div class="pair">${field("contact_email", "Agent email", "email", 254)}${field("agent_phone", "Agent phone", "tel", 40)}</div></section><section class="form-section"><h2>Your broker</h2><p class="muted">Add the broker details you want displayed on your check-in page.</p><div class="pair">${field("broker_name", "Broker name")}${field("broker_license", "Broker license number", "text", 64)}</div><div class="pair">${field("broker_email", "Broker email", "email", 254)}${field("broker_phone", "Broker phone", "tel", 40)}</div></section><section class="form-section"><h2>Visitor form</h2><p class="muted">Keep it short. Choose the extra questions that help.</p>${toggle("ask_phone", "Ask for a phone number")}${toggle("ask_timeline", "Ask about buying timeline")}${toggle("ask_agent", "Ask about agent representation")}<p class="small-note">These answers are optional. Follow-up permission is always optional and starts unchecked.</p></section><section class="form-section"><h2>Your welcome</h2><p class="muted">A little hospitality, before they walk through the door.</p>${toggle("show_location", "Show city and state beside the address")}<div class="stack"><label for="welcome">Welcome message<textarea id="welcome" name="welcome" maxlength="300">${esc(s.welcome)}</textarea></label><label for="privacy_note">How visitor details are used<textarea id="privacy_note" name="privacy_note" maxlength="600" required>${esc(s.privacy_note)}</textarea></label></div></section><footer class="settings-actions"><p class="form-error" aria-live="polite"></p><span id="saved-state" class="success-line" role="status">Saved</span><button class="btn primary hidden" id="save-settings" type="submit">Save changes</button></footer></form><aside class="preview-column"><h3>Live preview</h3><p>Example of your visitor’s separate check-in page.</p><div class="preview" id="brand-preview">${preview(s)}</div></aside></div>`,
+    `<header class="heading"><div><h1>Make yourself at home.</h1><p class="sub">Your name. Your colors. Your welcome.</p></div></header><div class="customize-layout"><form id="settings-form"><section class="form-section"><h2>Your brand</h2><p class="muted">Every field is optional. Empty details stay hidden from visitors.</p><div class="pair">${field("business_name", "Brokerage name")}${field("logo_url", "Brokerage logo URL", "url", 2048)}</div><p class="small-note">Use a direct HTTPS image link. Your logo appears beside the brokerage name without cropping.</p><label for="color">Brand color</label><div class="color-options">${["#214d3b", "#24405f", "#a1442c", "#30312e"].map((c) => `<button class="swatch" type="button" style="--swatch:${c}" data-action="color" data-color="${c}" aria-label="Use ${c}" aria-pressed="${s.color.toLowerCase() === c}"></button>`).join("")}<input type="color" name="color" id="color" value="${esc(s.color)}" aria-label="Custom brand color"></div></section><section class="form-section"><h2>Your contact details</h2><p class="muted">Give visitors a way to reach you after they stop by.</p><div class="pair">${field("host_name", "Agent name")}${field("agent_license", "Agent license number", "text", 64)}</div>${field("agent_photo_url", "Agent photo URL", "url", 2048)}<p class="small-note">Use a direct HTTPS image link. A square headshot works best; it appears in a circle beside your name.</p><div class="pair">${field("contact_email", "Agent email", "email", 254)}${field("agent_phone", "Agent phone", "tel", 40)}</div></section><section class="form-section"><h2>Your broker</h2><p class="muted">Add the broker details you want displayed on your check-in page.</p><div class="pair">${field("broker_name", "Broker name")}${field("broker_license", "Broker license number", "text", 64)}</div><div class="pair">${field("broker_email", "Broker email", "email", 254)}${field("broker_phone", "Broker phone", "tel", 40)}</div></section><section class="form-section"><h2>Visitor form</h2><p class="muted">Keep it short. Choose the extra questions that help.</p>${toggle("ask_phone", "Ask for a phone number")}${toggle("ask_timeline", "Ask about buying timeline")}${toggle("ask_agent", "Ask about agent representation")}<p class="small-note">These answers are optional. Follow-up permission is always optional and starts unchecked.</p></section><section class="form-section"><h2>Your welcome</h2><p class="muted">A little hospitality, before they walk through the door.</p>${toggle("show_location", "Show city and state beside the address")}<div class="stack"><label for="welcome">Welcome message<textarea id="welcome" name="welcome" maxlength="300">${esc(s.welcome)}</textarea></label><label for="privacy_note">How visitor details are used<textarea id="privacy_note" name="privacy_note" maxlength="600" required>${esc(s.privacy_note)}</textarea></label></div></section><footer class="settings-actions"><p class="form-error" aria-live="polite"></p><span id="saved-state" class="success-line" role="status">Saved</span><button class="btn primary hidden" id="save-settings" type="submit">Save changes</button></footer></form><aside class="preview-column"><h3>Live preview</h3><p>Example of your visitor’s separate check-in page.</p><div class="preview" id="brand-preview">${preview(s)}</div></aside></div>`,
     "/customize",
   );
 }
@@ -495,6 +502,13 @@ document.addEventListener("click", async (event) => {
     toast(error.message);
   }
 });
+// Image errors do not bubble. Capture them so a missing optional image leaves
+// the host details readable without a broken-image placeholder.
+document.addEventListener("error", (event) => {
+  if (event.target instanceof HTMLImageElement && event.target.classList.contains("contact-image")) {
+    event.target.hidden = true;
+  }
+}, true);
 document.addEventListener("input", (event) => {
   if (event.target.closest("#settings-form")) settingsChanged();
   if (event.target.id === "visitor-search") {

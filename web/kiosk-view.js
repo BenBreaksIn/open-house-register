@@ -6,13 +6,6 @@ export function kioskView(h, s, { esc, icon, form, contact, dateLabel, propertyT
       esc(h.address) +
       '">'
     : "";
-  const logo = s.logo_url
-    ? '<img class="guest-logo" src="' +
-      esc(s.logo_url) +
-      '" alt="' +
-      esc(s.business_name || "Host logo") +
-      '">'
-    : "";
   const note = h.note ? '<p class="small-note">' + esc(h.note) + "</p>" : "";
   const content =
     h.status === "open"
@@ -21,7 +14,7 @@ export function kioskView(h, s, { esc, icon, form, contact, dateLabel, propertyT
   return [
     '<main id="main" class="kiosk">',
     '<section class="kiosk-property">' + image,
-    '<div class="kiosk-property-copy">' + logo,
+    '<div class="kiosk-property-copy">',
     '<p class="guest-kicker">Welcome to</p>',
     propertyTitle(h, s),
     '<p class="date">' +

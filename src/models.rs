@@ -9,6 +9,7 @@ pub const CONSENT_TEXT: &str = "I'd like the host to follow up with me about thi
 pub struct Settings {
     pub business_name: String,
     pub host_name: String,
+    pub agent_photo_url: String,
     pub contact_email: String,
     pub agent_phone: String,
     pub agent_license: String,
@@ -30,6 +31,7 @@ impl Default for Settings {
         Self {
             business_name: String::new(),
             host_name: String::new(),
+            agent_photo_url: String::new(),
             contact_email: String::new(),
             agent_phone: String::new(),
             agent_license: String::new(),
@@ -171,6 +173,8 @@ impl Settings {
             email(&self.contact_email)?
         };
         self.logo_url = image_url(&self.logo_url)?;
+        self.agent_photo_url = image_url(&self.agent_photo_url)
+            .map_err(|message| format!("Agent photo: {message}"))?;
         self.welcome = text(&self.welcome, 300, false)?;
         self.privacy_note = text(&self.privacy_note, 600, true)?;
         if self.color.len() != 7
@@ -235,6 +239,14 @@ mod tests {
     fn validation_rejects_bad_urls_and_emails() {
         assert!(image_url("javascript:alert(1)").is_err());
         assert!(image_url("https://user:pass@example.com/x").is_err());
+        assert!(
+            Settings {
+                agent_photo_url: "http://example.com/photo.png".into(),
+                ..Default::default()
+            }
+            .validate()
+            .is_err()
+        );
         assert!(email("a@b").is_err());
         assert_eq!(email(" MAYA@EXAMPLE.COM ").unwrap(), "maya@example.com");
     }

@@ -15,6 +15,7 @@ A welcoming check-in page for visitors, and a clear workspace for the host. Buil
 - Print a real QR sign pointing to that page.
 - Search visitor registrations, export CSV, and permanently delete individual records.
 - Customize brokerage name, logo, brand color, welcome message, and privacy notice.
+- Add optional HTTPS image links under **Customize** for an agent headshot beside their name and a brokerage logo beside the brokerage name. Photos are cropped to a circle; logos stay uncropped. These appear on visitor pages, the kiosk, and the QR sign.
 - Optionally show city and state beside the address on visitor pages and the QR sign. It starts hidden; enable it under **Customize → Your welcome**.
 - Optionally show agent name, agent license number, phone, and email; broker name, broker license number, phone, and email. Empty fields disappear from the visitor page.
 - Choose whether to ask visitors for a phone number, buying timeline, and agent representation. These answers are optional.
