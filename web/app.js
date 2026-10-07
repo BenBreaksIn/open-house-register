@@ -2,6 +2,12 @@ import { createKioskController } from "/assets/kiosk.js";
 import { kioskView } from "/assets/kiosk-view.js";
 const app = document.querySelector("#app");
 let data, selected, toastTimer, kiosk;
+let hostEpoch = 0, hostRequest, hostDraft;
+const sessionChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("houseworks-session") : null;
+function announceSignout() {
+  sessionChannel?.postMessage("signed-out");
+  try { localStorage.setItem("houseworks-signout", crypto.randomUUID()); } catch {}
+}
 const kioskRoute = location.pathname.match(/^\/kiosk\/([0-9a-f-]{36})$/i);
 const $ = (selector, root = document) => root.querySelector(selector);
 const esc = (value) =>
@@ -211,8 +217,10 @@ function dashboard() {
       "/",
     );
   const visitors = data.visitors.filter((v) => v.house_id === h.id);
+  const capacity = data.capacity;
+  const capacityNote = capacity ? `<p class="small-note" role="status">${Number(capacity.events[h.id] || 0).toLocaleString()} of ${Number(capacity.event_limit).toLocaleString()} registrations for this open house · ${Number(capacity.total).toLocaleString()} of ${Number(capacity.total_limit).toLocaleString()} across your workspace.${Number(capacity.events[h.id] || 0) >= capacity.event_limit || capacity.total >= capacity.total_limit ? " Check-in is full. Export and remove records you no longer need, or ask your administrator to increase capacity." : ""}</p>` : "";
   return shell(
-    `${heading}<div class="rule"><div class="row"><div class="house-picker"><label class="hidden" for="house-selector">Choose an open house</label><select id="house-selector">${data.houses.map((x) => `<option value="${x.id}" ${x.id === h.id ? "selected" : ""}>${esc(x.address)} · ${esc(x.status)}</option>`).join("")}</select></div><span class="spacer"></span><button class="btn quiet" data-action="edit-house" data-id="${h.id}">Edit details</button></div><section class="property"><div>${h.photo_url ? `<img class="property-image" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : `<div class="photo-empty">${icon("home")}</div>`}${h.photo_url === "/assets/sample-house.png" ? '<p class="small-note">Illustrative sample photo</p>' : ""}</div><div><h2>${esc(h.address)}</h2><p class="place">${esc(h.location)}</p><p class="date">${esc(dateLabel(h))}</p><p class="small-note">${h.status === "open" ? "Accepting check-ins" : h.status === "draft" ? "Draft · only visible to you" : "Check-in closed"}</p>${h.status === "draft" ? `<div class="row property-actions"><button class="btn primary" data-action="publish-house" data-id="${h.id}">Open check-in page ${icon("arrow")}</button></div>` : `<div class="checkin-options"><section class="checkin-option"><h3>Use this device</h3><a class="btn primary" href="/kiosk/${h.id}">${icon("expand")} Launch kiosk</a><p>Let visitors type on your tablet or computer. Signs this device out of the host workspace.</p></section><section class="checkin-option"><h3>Use their own phone</h3><a class="btn" target="_blank" rel="noopener" href="/sign/${h.id}">${icon("qr")} Share QR code</a><p>Display or print the code. Visitors check in on their own device.</p></section></div><a class="phone-preview-link" target="_blank" rel="noopener" href="/visit/${h.id}">Preview phone check-in</a>`}<div class="stats"><div class="stat"><strong>${visitors.length}</strong><span>Visitors</span></div><div class="stat"><strong>${visitors.filter((v) => v.follow_up).length}</strong><span>Requested follow-up</span></div><div class="stat"><strong>${visitors.filter((v) => v.timeline === "0–3 months").length}</strong><span>Buying in 0–3 months</span></div></div></div></section><section class="rule"><div class="section-head"><h2>Your visitors</h2><div class="table-tools"><label class="hidden" for="visitor-search">Search visitors</label><input id="visitor-search" type="search" placeholder="Search by name or email…"><a class="btn" href="/api/admin/houses/${h.id}/export">${icon("download")} Export CSV</a></div></div>${visitorsTable(visitors)}</section></div>`,
+    `${heading}${capacityNote}<div class="rule"><div class="row"><div class="house-picker"><label class="hidden" for="house-selector">Choose an open house</label><select id="house-selector">${data.houses.map((x) => `<option value="${x.id}" ${x.id === h.id ? "selected" : ""}>${esc(x.address)} · ${esc(x.status)}</option>`).join("")}</select></div><span class="spacer"></span><button class="btn quiet" data-action="edit-house" data-id="${h.id}">Edit details</button></div><section class="property"><div>${h.photo_url ? `<img class="property-image" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : `<div class="photo-empty">${icon("home")}</div>`}${h.photo_url === "/assets/sample-house.png" ? '<p class="small-note">Illustrative sample photo</p>' : ""}</div><div><h2>${esc(h.address)}</h2><p class="place">${esc(h.location)}</p><p class="date">${esc(dateLabel(h))}</p><p class="small-note">${h.status === "open" ? "Accepting check-ins" : h.status === "draft" ? "Draft · only visible to you" : "Check-in closed"}</p>${h.status === "draft" ? `<div class="row property-actions"><button class="btn primary" data-action="publish-house" data-id="${h.id}">Open check-in page ${icon("arrow")}</button></div>` : `<div class="checkin-options"><section class="checkin-option"><h3>Use this device</h3><a class="btn primary" href="/kiosk/${h.id}">${icon("expand")} Launch kiosk</a><p>Let visitors type on your tablet or computer. Signs this device out of the host workspace.</p></section><section class="checkin-option"><h3>Use their own phone</h3><a class="btn" target="_blank" rel="noopener" href="/sign/${h.id}">${icon("qr")} Share QR code</a><p>Display or print the code. Visitors check in on their own device.</p></section></div><a class="phone-preview-link" target="_blank" rel="noopener" href="/visit/${h.id}">Preview phone check-in</a>`}<div class="stats"><div class="stat"><strong>${visitors.length}</strong><span>Visitors</span></div><div class="stat"><strong>${visitors.filter((v) => v.follow_up).length}</strong><span>Requested follow-up</span></div><div class="stat"><strong>${visitors.filter((v) => v.timeline === "0–3 months").length}</strong><span>Buying in 0–3 months</span></div></div></div></section><section class="rule"><div class="section-head"><h2>Your visitors</h2><div class="table-tools"><label class="hidden" for="visitor-search">Search visitors</label><input id="visitor-search" type="search" placeholder="Search by name or email…"><a class="btn" href="/api/admin/houses/${h.id}/export">${icon("download")} Export CSV</a></div></div>${visitorsTable(visitors)}</section></div>`,
     "/",
   );
 }
@@ -282,8 +290,14 @@ function houseDialog(id) {
   dialog.addEventListener("close", () => dialog.remove());
 }
 async function loadHost() {
+  if (document.hidden) return;
+  const epoch = ++hostEpoch;
+  hostRequest?.abort();
+  hostRequest = new AbortController();
   try {
-    data = await api("/api/admin/dashboard");
+    const fresh = await api("/api/admin/dashboard", { signal: hostRequest.signal });
+    if (epoch !== hostEpoch || document.hidden) return;
+    data = fresh;
     const remembered = localStorage.getItem("houseworks-house");
     selected = selected || remembered;
     brandColor(data.settings.color);
@@ -294,10 +308,56 @@ async function loadHost() {
         : location.pathname === "/visitors"
           ? allVisitors()
           : dashboard();
+    restoreHostDraft();
   } catch (error) {
+    if (epoch !== hostEpoch || document.hidden) return;
+    data = null;
+    if (error.status === 401) hostDraft = null;
     if (error.status === 401) loginPage();
     else loginPage(error.message);
   }
+}
+function hideHost(preserveDraft = true) {
+  // Retain only editable host fields in memory. Never retain the visitor payload
+  // or private DOM while a tab is hidden or a kiosk is taking over the browser.
+  const form = $("#house-form") || $("#settings-form");
+  if (!preserveDraft) hostDraft = null;
+  else if (form) {
+    hostDraft = {
+      type: form.id,
+      id: form.dataset.id,
+      dirty: form.id === "settings-form" && !$("#save-settings").classList.contains("hidden"),
+      fields: [...form.elements].filter((el) => el.name).map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]),
+    };
+  }
+  ++hostEpoch;
+  hostRequest?.abort();
+  $("#house-dialog")?.remove();
+  app.replaceChildren();
+  data = null;
+}
+function restoreHostDraft() {
+  const draft = hostDraft;
+  hostDraft = null;
+  if (!draft) return;
+  if (draft.type === "house-form") {
+    if (draft.id && !data.houses.some((h) => h.id === draft.id)) return;
+    houseDialog(draft.id);
+  }
+  const form = document.getElementById(draft.type);
+  if (!form) return;
+  for (const [name, value] of draft.fields) {
+    const field = form.elements.namedItem(name);
+    if (field) {
+      if (typeof value === "boolean") field.checked = value;
+      else field.value = value;
+    }
+  }
+  if (draft.dirty) settingsChanged();
+}
+function hostSignedOut() {
+  hideHost(false);
+  if (!document.hidden) loginPage();
 }
 document.addEventListener("submit", async (event) => {
   const form = event.target;
@@ -314,6 +374,7 @@ document.addEventListener("submit", async (event) => {
       : $("button[type=submit]", form);
   button.disabled = true;
   $(".form-error", form).textContent = "";
+  const epoch = hostEpoch;
   try {
     const values = Object.fromEntries(new FormData(form));
     if (form.id === "login-form") {
@@ -335,10 +396,12 @@ document.addEventListener("submit", async (event) => {
       kiosk?.confirmed();
     }
     if (form.id === "settings-form") {
-      data.settings = await api("/api/admin/settings", {
+      const settings = await api("/api/admin/settings", {
         method: "PUT",
         body: JSON.stringify(readSettings()),
       });
+      if (epoch !== hostEpoch || !form.isConnected) return;
+      data.settings = settings;
       brandColor(data.settings.color);
       $("#saved-state").classList.remove("hidden");
       $("#save-settings").classList.add("hidden");
@@ -355,6 +418,7 @@ document.addEventListener("submit", async (event) => {
         method: id ? "PUT" : "POST",
         body: JSON.stringify(values),
       });
+      if (epoch !== hostEpoch || !form.isConnected) return;
       selected = h.id;
       localStorage.setItem("houseworks-house", selected);
       $("#house-dialog").close();
@@ -391,7 +455,10 @@ document.addEventListener("click", async (event) => {
       toast("Up to date.");
     }
     if (action === "logout") {
+      hostSignedOut();
+      announceSignout();
       await api("/api/logout", { method: "POST" });
+      announceSignout();
       location.href = "/";
     }
     if (action === "color") {
@@ -462,7 +529,9 @@ async function startKiosk() {
     notice: toast,
   });
   try {
+    announceSignout();
     await api("/api/kiosk/start", { method: "POST" });
+    announceSignout();
     await loadGuest(kioskRoute[1], false, true);
   } catch {
     app.innerHTML =
@@ -474,19 +543,18 @@ else if (publicRoute) loadGuest(publicRoute[2], publicRoute[1] === "sign");
 else {
   loadHost();
   // Cached pages and other host tabs must recheck access after kiosk launch.
-  window.addEventListener("pagehide", () => {
-    app.replaceChildren();
-    data = null;
-  });
+  window.addEventListener("pagehide", () => hideHost());
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) loadHost();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      if (!document.querySelector("#settings-form, #house-dialog")) {
-        app.replaceChildren();
-        data = null;
-      }
-    } else if (!app.children.length) loadHost();
+    if (document.hidden) hideHost();
+    else loadHost();
+  });
+  sessionChannel?.addEventListener("message", (event) => {
+    if (event.data === "signed-out") hostSignedOut();
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === "houseworks-signout") hostSignedOut();
   });
 }

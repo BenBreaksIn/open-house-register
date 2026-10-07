@@ -1,3 +1,4 @@
+use crate::client_ip::ClientKey;
 use crate::{ApiError, AppState, config::digest, db};
 use axum::{
     Json,
@@ -37,8 +38,8 @@ pub async fn require_host(State(state): State<AppState>, request: Request, next:
     let Some(token) = token(request.headers()).filter(|t| t.len() == 64) else {
         return ApiError::unauthorized().into_response();
     };
-    let active: Result<(bool,), _> = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM sessions WHERE token_hash=$1 AND password_fingerprint=$2 AND expires_at>NOW())")
-        .bind(digest(token)).bind(&state.config.password_hash).fetch_one(&state.pool).await;
+    let active: Result<(bool,), _> = sqlx::query_as("SELECT EXISTS(SELECT 1 FROM sessions WHERE token_hash=$1 AND session_generation=$2 AND expires_at>NOW())")
+        .bind(digest(token)).bind(&state.config.session_generation).fetch_one(&state.pool).await;
     match active {
         Ok((true,)) => next.run(request).await,
         Ok((false,)) => ApiError::unauthorized().into_response(),
@@ -51,6 +52,7 @@ pub struct Login {
 }
 pub async fn login(
     State(state): State<AppState>,
+    ClientKey(client): ClientKey,
     headers: HeaderMap,
     Json(input): Json<Login>,
 ) -> Result<Response, ApiError> {
@@ -60,7 +62,9 @@ pub async fn login(
             "Use the sign-in form.",
         ));
     }
-    if !db::rate_limit(&state.pool, "login", 30).await? {
+    if !db::rate_limit(&state.pool, &format!("login:{client}"), 10).await?
+        || !db::rate_limit(&state.pool, "login:global", 600).await?
+    {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
             "Too many sign-in attempts. Please wait one minute.",
@@ -79,18 +83,16 @@ pub async fn login(
         ));
     }
     let token = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-    sqlx::query("DELETE FROM sessions WHERE expires_at<NOW() OR password_fingerprint<>$1")
-        .bind(&state.config.password_hash)
+    sqlx::query("DELETE FROM sessions WHERE expires_at<NOW() OR session_generation<>$1")
+        .bind(&state.config.session_generation)
         .execute(&state.pool)
         .await?;
-    sqlx::query(
-        "INSERT INTO sessions(token_hash,password_fingerprint,expires_at) VALUES ($1,$2,$3)",
-    )
-    .bind(digest(&token))
-    .bind(&state.config.password_hash)
-    .bind(Utc::now() + Duration::hours(24))
-    .execute(&state.pool)
-    .await?;
+    sqlx::query("INSERT INTO sessions(token_hash,session_generation,expires_at) VALUES ($1,$2,$3)")
+        .bind(digest(&token))
+        .bind(&state.config.session_generation)
+        .bind(Utc::now() + Duration::hours(24))
+        .execute(&state.pool)
+        .await?;
     let secure = if state.config.secure_cookie {
         "; Secure"
     } else {

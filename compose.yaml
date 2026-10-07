@@ -6,7 +6,11 @@ services:
     environment:
       DATABASE_URL: postgres://houseworks:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/houseworks
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3030}
+      MAX_VISITORS_PER_EVENT: ${MAX_VISITORS_PER_EVENT:-1000}
+      MAX_VISITORS_TOTAL: ${MAX_VISITORS_TOTAL:-10000}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
     depends_on:
       db:
         condition: service_healthy

@@ -12,6 +12,8 @@ services:
           property: connectionString
       - key: ADMIN_PASSWORD
         generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
 databases:
   - name: open-house-register-db
     plan: 0.1c-256mb

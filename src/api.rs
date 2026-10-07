@@ -1,10 +1,13 @@
+use crate::client_ip::ClientKey;
 use crate::{ApiError, AppState, auth, db, models::*};
 use axum::{
     Json,
+    body::Body,
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, Utc};
 use qrcode::{QrCode, render::svg};
 use serde_json::json;
 use uuid::Uuid;
@@ -19,8 +22,14 @@ pub async fn dashboard(State(state): State<AppState>) -> Result<Json<serde_json:
     )
     .fetch_all(&state.pool)
     .await?;
+    let counts: Vec<(Uuid, i64)> =
+        sqlx::query_as("SELECT house_id,COUNT(*) FROM visitors GROUP BY house_id")
+            .fetch_all(&state.pool)
+            .await?;
+    let total: i64 = counts.iter().map(|(_, n)| n).sum();
+    let event_counts: std::collections::HashMap<_, _> = counts.into_iter().collect();
     Ok(Json(
-        json!({"settings":db::settings(&state.pool).await?,"houses":houses,"visitors":visitors,"base_url":state.config.base_url,"consent_text":CONSENT_TEXT}),
+        json!({"settings":db::settings(&state.pool).await?,"houses":houses,"visitors":visitors,"base_url":state.config.base_url,"consent_text":CONSENT_TEXT,"capacity":{"event_limit":state.config.event_capacity,"total_limit":state.config.total_capacity,"total":total,"events":event_counts}}),
     ))
 }
 pub async fn save_settings(
@@ -71,6 +80,7 @@ pub async fn guest_info(
 pub async fn register(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    ClientKey(client): ClientKey,
     headers: HeaderMap,
     Json(input): Json<Registration>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -87,7 +97,7 @@ pub async fn register(
             "This open house is no longer accepting check-ins.",
         ));
     }
-    if !db::rate_limit(&state.pool, &format!("house:{id}"), 120).await? {
+    if !db::rate_limit(&state.pool, &format!("checkin:{client}"), 30).await? {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
             "Please wait a moment and try again.",
@@ -99,8 +109,19 @@ pub async fn register(
     let input = input
         .validate(&db::settings(&state.pool).await?)
         .map_err(ApiError::bad_request)?;
+    if !db::rate_limit(&state.pool, "checkin:global", 3000).await? {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Check-in is busy. Please try again shortly.",
+        ));
+    }
     // Serialize registration against closing or returning the event to draft.
     let mut tx = state.pool.begin().await?;
+    // One short, cross-instance lock makes quota checks and insertion atomic.
+    // Deletes can only reduce occupancy; they do not need this lock.
+    sqlx::query("SELECT pg_advisory_xact_lock(72684301)")
+        .execute(&mut *tx)
+        .await?;
     let status: Option<(String,)> =
         sqlx::query_as("SELECT status FROM open_houses WHERE id=$1 FOR SHARE")
             .bind(id)
@@ -115,6 +136,28 @@ pub async fn register(
             ));
         }
         _ => return Err(ApiError::not_found()),
+    }
+    let (duplicate,): (bool,) =
+        sqlx::query_as("SELECT EXISTS(SELECT 1 FROM visitors WHERE house_id=$1 AND email=$2)")
+            .bind(id)
+            .bind(&input.email)
+            .fetch_one(&mut *tx)
+            .await?;
+    if duplicate {
+        return Ok(Json(json!({"ok":true})));
+    }
+    let (event_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM visitors WHERE house_id=$1")
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let (total_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM visitors")
+        .fetch_one(&mut *tx)
+        .await?;
+    if event_count >= state.config.event_capacity || total_count >= state.config.total_capacity {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "This check-in has reached its capacity. Please ask the host for help.",
+        ));
     }
     // Do not overwrite another visitor's saved choices when an email is submitted twice.
     sqlx::query("INSERT INTO visitors(id,house_id,name,email,phone,timeline,represented,follow_up,consent_text) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(house_id,email) DO NOTHING")
@@ -148,38 +191,26 @@ pub async fn export(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Response, ApiError> {
-    let visitors = sqlx::query_as::<_, Visitor>(
-        "SELECT * FROM visitors WHERE house_id=$1 ORDER BY checked_in_at DESC",
-    )
-    .bind(id)
-    .fetch_all(&state.pool)
-    .await?;
-    let mut w = csv::Writer::from_writer(Vec::new());
-    w.write_record([
-        "Name",
-        "Email",
-        "Phone",
-        "Buying timeline",
-        "Working with an agent",
-        "Follow-up requested",
-        "Permission wording shown",
-        "Checked in (UTC)",
-    ])
-    .map_err(ApiError::internal)?;
-    for v in visitors {
-        w.write_record([
-            csv_cell(&v.name),
-            csv_cell(&v.email),
-            csv_cell(&v.phone),
-            csv_cell(&v.timeline),
-            csv_cell(&v.represented),
-            v.follow_up.to_string(),
-            v.consent_text,
-            v.checked_in_at.to_rfc3339(),
-        ])
-        .map_err(ApiError::internal)?;
-    }
-    let bytes = w.into_inner().map_err(ApiError::internal)?;
+    let first = export_batch(&state.pool, id, None).await?;
+    let stream = futures_util::stream::try_unfold(
+        (state.pool, id, None, Some(first)),
+        |(pool, id, after, first)| async move {
+            let is_first = first.is_some();
+            let rows = match first {
+                Some(rows) => rows,
+                None => export_batch(&pool, id, after)
+                    .await
+                    .map_err(|_| std::io::Error::other("CSV export interrupted"))?,
+            };
+            if rows.is_empty() && !is_first {
+                return Ok::<_, std::io::Error>(None);
+            }
+            let after = rows.last().map(|v| (v.checked_in_at, v.id)).or(after);
+            let bytes = csv_batch(&rows, is_first)
+                .map_err(|_| std::io::Error::other("CSV export interrupted"))?;
+            Ok(Some((bytes, (pool, id, after, None))))
+        },
+    );
     Ok((
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
@@ -188,9 +219,52 @@ pub async fn export(
                 "attachment; filename=visitors.csv",
             ),
         ],
-        bytes,
+        Body::from_stream(stream),
     )
         .into_response())
+}
+
+const EXPORT_BATCH_SIZE: i64 = 200;
+async fn export_batch(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    after: Option<(DateTime<Utc>, Uuid)>,
+) -> Result<Vec<Visitor>, sqlx::Error> {
+    match after {
+        None => sqlx::query_as::<_,Visitor>("SELECT * FROM visitors WHERE house_id=$1 ORDER BY checked_in_at DESC,id DESC LIMIT $2").bind(id).bind(EXPORT_BATCH_SIZE).fetch_all(pool).await,
+        Some((time, last_id)) => sqlx::query_as::<_,Visitor>("SELECT * FROM visitors WHERE house_id=$1 AND (checked_in_at,id)<($2,$3) ORDER BY checked_in_at DESC,id DESC LIMIT $4").bind(id).bind(time).bind(last_id).bind(EXPORT_BATCH_SIZE).fetch_all(pool).await,
+    }
+}
+
+fn csv_batch(visitors: &[Visitor], include_header: bool) -> Result<Vec<u8>, ApiError> {
+    let mut w = csv::Writer::from_writer(Vec::new());
+    if include_header {
+        w.write_record([
+            "Name",
+            "Email",
+            "Phone",
+            "Buying timeline",
+            "Working with an agent",
+            "Follow-up requested",
+            "Permission wording shown",
+            "Checked in (UTC)",
+        ])
+        .map_err(ApiError::internal)?;
+    }
+    for v in visitors {
+        w.write_record([
+            csv_cell(&v.name),
+            csv_cell(&v.email),
+            csv_cell(&v.phone),
+            csv_cell(&v.timeline),
+            csv_cell(&v.represented),
+            v.follow_up.to_string(),
+            v.consent_text.clone(),
+            v.checked_in_at.to_rfc3339(),
+        ])
+        .map_err(ApiError::internal)?;
+    }
+    w.into_inner().map_err(ApiError::internal)
 }
 pub async fn delete_visitor(
     State(state): State<AppState>,

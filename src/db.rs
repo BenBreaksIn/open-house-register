@@ -25,7 +25,10 @@ pub async fn settings(pool: &PgPool) -> Result<Settings, sqlx::Error> {
 }
 
 pub async fn rate_limit(pool: &PgPool, bucket: &str, limit: i32) -> Result<bool, sqlx::Error> {
-    let (attempts,): (i32,) = sqlx::query_as("INSERT INTO rate_limits(bucket) VALUES ($1) ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN rate_limits.window_start < NOW()-INTERVAL '1 minute' THEN 1 ELSE rate_limits.attempts+1 END, window_start=CASE WHEN rate_limits.window_start < NOW()-INTERVAL '1 minute' THEN NOW() ELSE rate_limits.window_start END RETURNING attempts")
-        .bind(bucket).fetch_one(pool).await?;
+    sqlx::query("DELETE FROM rate_limits WHERE window_start<NOW()-INTERVAL '2 minutes'")
+        .execute(pool)
+        .await?;
+    let (attempts,): (i32,) = sqlx::query_as("INSERT INTO rate_limits(bucket) VALUES ($1) ON CONFLICT(bucket) DO UPDATE SET attempts=CASE WHEN rate_limits.window_start < NOW()-INTERVAL '1 minute' THEN 1 ELSE LEAST(rate_limits.attempts,$2)+1 END, window_start=CASE WHEN rate_limits.window_start < NOW()-INTERVAL '1 minute' THEN NOW() ELSE rate_limits.window_start END RETURNING attempts")
+        .bind(bucket).bind(limit).fetch_one(pool).await?;
     Ok(attempts <= limit)
 }
