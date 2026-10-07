@@ -15,6 +15,7 @@ A welcoming check-in page for visitors, and a clear workspace for the host. Buil
 - Print a real QR sign pointing to that page.
 - Search visitor registrations, export CSV, and permanently delete individual records.
 - Customize brokerage name, logo, brand color, welcome message, and privacy notice.
+- Optionally show city and state beside the address on visitor pages and the QR sign. It starts hidden; enable it under **Customize → Your welcome**.
 - Optionally show agent name, agent license number, phone, and email; broker name, broker license number, phone, and email. Empty fields disappear from the visitor page.
 - Choose whether to ask visitors for a phone number, buying timeline, and agent representation. These answers are optional.
 - Record optional follow-up permission, the exact wording presented, and registration time. Permission starts unchecked. The app does not send messages.

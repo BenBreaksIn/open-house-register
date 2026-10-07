@@ -20,6 +20,7 @@ pub struct Settings {
     pub color: String,
     pub welcome: String,
     pub privacy_note: String,
+    pub show_location: bool,
     pub ask_phone: bool,
     pub ask_timeline: bool,
     pub ask_agent: bool,
@@ -41,6 +42,7 @@ impl Default for Settings {
             welcome: "Thanks for stopping by. Make yourself at home.".into(),
             privacy_note:
                 "Your details go to the host of this open house. Follow-up is your choice.".into(),
+            show_location: false,
             ask_phone: true,
             ask_timeline: true,
             ask_agent: true,

@@ -189,6 +189,7 @@ async fn persisted_registration_access_and_consent() {
         broker_license: "DEMO-456".into(),
         agent_phone: "555-0100".into(),
         broker_email: "broker@example.com".into(),
+        show_location: true,
         ..Settings::default()
     };
     let (s, _, _) = request(
@@ -243,6 +244,7 @@ async fn persisted_registration_access_and_consent() {
     assert_eq!(s, StatusCode::OK);
     let guest: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(guest["settings"]["broker_license"], "DEMO-456");
+    assert_eq!(guest["settings"]["show_location"], true);
     assert!(guest.get("visitors").is_none());
     assert!(guest.get("password").is_none());
     let (s, _, body) = request(

@@ -754,9 +754,25 @@
     line-height: 1.06;
     letter-spacing: -1.7px;
   }
-  .guest-main .place {
-    font-size: 18px;
-    margin-top: 13px;
+  .property-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+  }
+  .property-title h1 {
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+  }
+  .property-location {
+    flex: none;
+    display: inline-block;
+    max-width: 100%;
+    font: 15px/1.4 var(--sans);
+    letter-spacing: normal;
+    color: var(--muted);
+    overflow-wrap: anywhere;
   }
   .guest-main .date {
     font-size: 13px;
@@ -1235,10 +1251,6 @@
     }
     .guest-main h1 {
       font-size: clamp(30px, 8.8vw, 38px);
-    }
-    .guest-main .place {
-      font-size: 16px;
-      margin-top: 8px;
     }
     .guest-main .date {
       margin-top: 4px;

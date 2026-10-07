@@ -1,4 +1,4 @@
-export function kioskView(h, s, { esc, icon, form, contact, dateLabel }) {
+export function kioskView(h, s, { esc, icon, form, contact, dateLabel, propertyTitle }) {
   const image = h.photo_url
     ? '<img class="kiosk-photo" src="' +
       esc(h.photo_url) +
@@ -23,10 +23,8 @@ export function kioskView(h, s, { esc, icon, form, contact, dateLabel }) {
     '<section class="kiosk-property">' + image,
     '<div class="kiosk-property-copy">' + logo,
     '<p class="guest-kicker">Welcome to</p>',
-    "<h1>" + esc(h.address) + "</h1>",
-    '<p class="place">' +
-      esc(h.location) +
-      '</p><p class="date">' +
+    propertyTitle(h, s),
+    '<p class="date">' +
       esc(dateLabel(h)) +
       "</p>",
     note + "</div></section>",
