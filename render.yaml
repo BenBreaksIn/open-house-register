@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: open-house-register
+    runtime: docker
+    plan: 0.5c-512mb
+    autoDeployTrigger: off
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: open-house-register-db
+          property: connectionString
+      - key: ADMIN_PASSWORD
+        generateValue: true
+databases:
+  - name: open-house-register-db
+    plan: 0.1c-256mb
+    postgresMajorVersion: "16"
+    ipAllowList: []

@@ -1,0 +1,40 @@
+[package]
+name = "open-house-register"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A welcoming, self-hosted open-house visitor register"
+default-run = "open-house-register"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "macros", "migrate"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+sha2 = "0.10"
+subtle = "2"
+url = "2"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+csv = "1"
+tower = { version = "0.5", features = ["util"] }
+vercel_runtime = { version = "2.4", features = ["axum"] }
+dotenvy = "0.15"
+
+[dev-dependencies]
+http-body-util = "0.1"
+
+[[bin]]
+name = "open-house-register"
+path = "src/main.rs"
+
+[[bin]]
+name = "vercel"
+path = "api/index.rs"
+
+[profile.release]
+lto = "thin"
+strip = true

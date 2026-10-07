@@ -1,0 +1,9 @@
+/target/
+/.local/
+/.vercel/
+.env
+.env.*
+!.env.example
+/output/
+/.playwright-cli/
+.DS_Store

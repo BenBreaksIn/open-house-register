@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:3030:3030"
+    environment:
+      DATABASE_URL: postgres://houseworks:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/houseworks
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3030}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: houseworks
+      POSTGRES_USER: houseworks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U houseworks -d houseworks"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  postgres-data:
