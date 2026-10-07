@@ -114,6 +114,9 @@
     font-size: 17px;
     font-weight: 400;
   }
+  .kiosk .guest-form select {
+    padding-right: 42px;
+  }
   .kiosk .radios {
     gap: 12px 26px;
   }
