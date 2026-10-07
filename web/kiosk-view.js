@@ -13,9 +13,6 @@ export function kioskView(h, s, { esc, icon, form, contact, dateLabel }) {
       esc(s.business_name || "Host logo") +
       '">'
     : "";
-  const brand = s.business_name
-    ? '<p class="guest-brand">' + esc(s.business_name) + "</p>"
-    : "";
   const note = h.note ? '<p class="small-note">' + esc(h.note) + "</p>" : "";
   const content =
     h.status === "open"
@@ -24,8 +21,9 @@ export function kioskView(h, s, { esc, icon, form, contact, dateLabel }) {
   return [
     '<main id="main" class="kiosk">',
     '<section class="kiosk-property">' + image,
-    '<div class="kiosk-property-copy">' + logo + brand,
-    "<h1>Welcome to <span>" + esc(h.address) + "</span></h1>",
+    '<div class="kiosk-property-copy">' + logo,
+    '<p class="guest-kicker">Welcome to</p>',
+    "<h1>" + esc(h.address) + "</h1>",
     '<p class="place">' +
       esc(h.location) +
       '</p><p class="date">' +

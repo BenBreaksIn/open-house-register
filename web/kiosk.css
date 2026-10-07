@@ -52,7 +52,7 @@
     font-size: clamp(32px, 3.7vw, 58px);
     line-height: 1.06;
   }
-  .kiosk-property .guest-brand {
+  .kiosk-property .guest-kicker {
     margin-bottom: 14px;
   }
   .kiosk-property .place {
@@ -78,7 +78,7 @@
     margin-bottom: 6px;
   }
   .kiosk-controls .icon-button {
-    border: 1px solid var(--line);
+    border: 1px solid var(--control-border);
     width: 44px;
     height: 44px;
   }
@@ -133,7 +133,7 @@
     margin: 0;
   }
   .kiosk .privacy {
-    font-size: 12px;
+    font-size: 13px;
   }
   .kiosk .guest-submit {
     min-height: 55px;
@@ -343,7 +343,7 @@
     .kiosk-property h1 {
       font-size: clamp(30px, 4.8vw, 48px);
     }
-    .kiosk-property .guest-brand {
+    .kiosk-property .guest-kicker {
       margin-bottom: 9px;
     }
     .kiosk-property .place {

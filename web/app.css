@@ -38,6 +38,7 @@
     --ink: #152d25;
     --muted: #626c66;
     --line: #dedfd6;
+    --control-border: #7e8980;
     --brand: #214d3b;
     --on-brand: #fff;
     --sage: #edf0e7;
@@ -51,6 +52,9 @@
     color: var(--ink);
     font: 15px/1.6 var(--sans);
     -webkit-font-smoothing: antialiased;
+  }
+  html {
+    scroll-padding-bottom: 100px;
   }
   h1,
   h2,
@@ -103,7 +107,7 @@
   textarea {
     display: block;
     width: 100%;
-    border: 1px solid #c9cec5;
+    border: 1px solid var(--control-border);
     background: var(--white);
     color: var(--ink);
     border-radius: 5px;
@@ -119,7 +123,7 @@
   }
   input::placeholder,
   textarea::placeholder {
-    color: #8a918b;
+    color: var(--muted);
     font-weight: 400;
   }
   input[type="checkbox"],
@@ -131,7 +135,7 @@
     margin: 0;
   }
   input[type="color"] {
-    border: 1px solid var(--line);
+    border: 1px solid var(--control-border);
     background: white;
     height: 46px;
     width: 60px;
@@ -221,7 +225,7 @@
     min-height: 44px;
     padding: 10px 18px;
     border-radius: 5px;
-    border: 1px solid #cbd0c6;
+    border: 1px solid var(--control-border);
     background: transparent;
     color: var(--ink);
     font-weight: 550;
@@ -577,6 +581,30 @@
     grid-template-columns: minmax(380px, 1fr) 350px;
     gap: 50px;
   }
+  #settings-form {
+    min-width: 0;
+  }
+  .settings-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 76px;
+    padding: 14px 0 calc(14px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .settings-actions .btn {
+    margin-left: auto;
+  }
+  .settings-actions .form-error,
+  dialog .actions .form-error {
+    flex-basis: 100%;
+  }
   .form-section {
     padding: 26px 0;
     border-top: 1px solid var(--line);
@@ -602,6 +630,7 @@
     font-size: 13px;
     font-weight: 400;
     margin: 13px 0;
+    min-height: 44px;
   }
   .choice input[type="checkbox"][role="switch"] {
     appearance: none;
@@ -678,9 +707,9 @@
   .preview .guest-photo {
     height: 160px;
   }
-  .preview .guest-brand {
-    margin-bottom: 13px;
-    font-size: 9px;
+  .preview .guest-kicker {
+    margin-bottom: 10px;
+    font-size: 11px;
   }
   .preview input {
     pointer-events: none;
@@ -704,14 +733,15 @@
   }
   .guest-main {
     padding: 32px 36px 40px;
+    overflow-wrap: anywhere;
   }
-  .guest-brand {
+  .guest-kicker {
     letter-spacing: 0.18em;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     font-weight: 650;
     color: var(--brand-ink, var(--brand));
-    margin-bottom: 17px;
+    margin-bottom: 12px;
   }
   .guest-logo {
     max-width: 160px;
@@ -746,7 +776,7 @@
   }
   .guest-form label,
   .guest-form legend {
-    font-size: 13px;
+    font-size: 14px;
   }
   .guest-form input:not([type="radio"], [type="checkbox"]),
   .guest-form select {
@@ -755,11 +785,18 @@
   .radios {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 8px 16px;
   }
   .radios .choice {
     margin: 0;
     gap: 8px;
+    min-width: 44px;
+    padding: 6px 0;
+  }
+  .guest-form input[type="checkbox"],
+  .guest-form input[type="radio"] {
+    width: 22px;
+    height: 22px;
   }
   .consent {
     margin: 4px 0 0;
@@ -770,7 +807,7 @@
     margin-top: 3px;
   }
   .privacy {
-    font-size: 11px;
+    font-size: 13px;
     color: var(--muted);
     line-height: 1.7;
     margin-top: 0;
@@ -783,7 +820,7 @@
   }
   .no-account {
     text-align: center;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--muted);
     margin-top: -10px;
   }
@@ -876,28 +913,54 @@
   dialog {
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 32px;
+    padding: 0;
     max-width: 690px;
     width: calc(100% - 30px);
     background: var(--paper);
     color: var(--ink);
     max-height: 92dvh;
-    overflow: auto;
+    overflow: hidden;
+  }
+  dialog[open] {
+    display: flex;
+    flex-direction: column;
   }
   dialog::backdrop {
     background: #0c251b65;
     backdrop-filter: blur(3px);
   }
   dialog .section-head {
-    margin-bottom: 25px;
+    flex: none;
+    padding: 24px 28px 20px;
+    margin: 0;
+    flex-wrap: nowrap;
+  }
+  dialog .section-head .icon-button {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  .dialog-form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .dialog-fields {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0 28px 24px;
+    scroll-padding: 16px;
   }
   dialog h2 {
     font-size: 35px;
   }
   dialog .actions {
+    flex: none;
     border-top: 1px solid var(--line);
-    padding-top: 20px;
-    margin-top: 6px;
+    padding: 16px 28px calc(16px + env(safe-area-inset-bottom));
+    margin: 0;
   }
   .loading {
     height: 100dvh;
@@ -1165,28 +1228,44 @@
       border: 0;
     }
     .guest-photo {
-      height: 225px;
+      height: clamp(120px, 18dvh, 160px);
     }
     .guest-main {
-      padding: 28px 24px 35px;
+      padding: 20px 24px 32px;
     }
     .guest-main h1 {
-      font-size: 40px;
+      font-size: clamp(30px, 8.8vw, 38px);
+    }
+    .guest-main .place {
+      font-size: 16px;
+      margin-top: 8px;
+    }
+    .guest-main .date {
+      margin-top: 4px;
+    }
+    .guest-welcome {
+      font-size: 14px;
+      padding-top: 14px;
+      margin: 16px 0 20px;
+    }
+    .guest-main > hr {
+      margin: 20px 0;
     }
     .guest-form {
-      gap: 21px;
+      gap: 18px;
     }
     .radios {
-      gap: 15px;
+      gap: 8px 16px;
     }
     .radios .choice {
-      font-size: 12px;
+      font-size: 14px;
     }
     .host-contact h3 {
       font-size: 25px;
     }
-    .guest-brand {
-      font-size: 9px;
+    .guest-kicker {
+      font-size: 11px;
+      margin-bottom: 8px;
     }
     .login {
       display: block;
@@ -1213,8 +1292,26 @@
       font-size: 33px;
     }
     dialog {
-      padding: 23px;
       max-height: 94dvh;
+    }
+    dialog .section-head {
+      padding: 16px 20px;
+      gap: 10px;
+    }
+    dialog h2 {
+      font-size: 28px;
+    }
+    .dialog-fields {
+      padding: 0 20px 20px;
+    }
+    dialog .actions {
+      padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+    }
+    .settings-actions .btn {
+      min-width: 160px;
+    }
+    .settings-actions .success-line {
+      font-size: 12px;
     }
     .print-sheet {
       padding: 28px;
@@ -1236,7 +1333,7 @@
     #toast {
       left: 20px;
       right: 20px;
-      bottom: 20px;
+      bottom: 92px;
     }
   }
   @media print {
