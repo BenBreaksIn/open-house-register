@@ -93,7 +93,7 @@ The button starts a guided install: it clones this repository, offers a PostgreS
 1. Choose your GitHub repository name and Vercel team.
 2. Create or connect a PostgreSQL database in the integration step. Select a plan and region that fit your use. Confirm the connection provides a `DATABASE_URL` environment variable; add the provider’s TLS connection string under that name if needed.
 3. Set `ADMIN_PASSWORD` to a unique password of at least 16 characters. Set `SESSION_SECRET` to a separate random value of at least 32 bytes; `openssl rand -hex 32` generates one. Keep both private.
-4. Deploy with the **Other** framework preset and the repository root. There is no frontend build command. The Rust function creates the schema on first startup.
+4. Keep the automatically detected **Rust** framework and the repository root, then deploy. There is no frontend build command. The Rust function creates the schema on first startup.
 5. Open the deployment, sign in, and follow **Your first open house** above. Scan the QR code from a phone to confirm it opens the public deployment, not localhost.
 
 Keep deployment access appropriate for visitors: test without a Vercel login before sharing the QR. The app’s host workspace always requires its own password.
