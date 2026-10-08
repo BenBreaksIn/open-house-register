@@ -8,7 +8,7 @@ Free, open-source software under MIT. Start with the guided Vercel setup below, 
 
 Actual app screenshot with fictional demo details. New installations start with an empty workspace.
 
-[Deploy your own](#deploy-your-own) · [Run locally](#run-locally) · [Architecture](#architecture)
+[Deploy your own](#deploy-your-own) · [Watch the 90-second setup guide](https://github.com/BenBreaksIn/open-house-register/releases/download/v0.1.0/open-houseworks-setup.mp4) · [Run locally](#run-locally) · [Architecture](#architecture)
 
 ## Your first open house
 
