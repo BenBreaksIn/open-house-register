@@ -1,18 +1,34 @@
 use crate::{config::Config, models::Settings};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};
 use std::time::Duration;
 
 pub async fn connect(config: &Config) -> Result<PgPool, sqlx::Error> {
+    // SQLx migrations use a session-level advisory lock. Transaction poolers
+    // cannot preserve that session, so Neon supplies a separate direct URL.
+    eprintln!("Preparing database schema");
+    let mut connection = tokio::time::timeout(
+        Duration::from_secs(8),
+        PgConnection::connect(&config.migration_database_url),
+    )
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)??;
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        sqlx::migrate!().run(&mut connection),
+    )
+    .await
+    .map_err(|_| sqlx::Error::PoolTimedOut)??;
+    connection.close().await?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_secs(8))
         .connect(&config.database_url)
         .await?;
-    sqlx::migrate!().run(&pool).await?;
     sqlx::query("INSERT INTO settings (id,data) VALUES (TRUE,$1) ON CONFLICT DO NOTHING")
         .bind(sqlx::types::Json(Settings::default()))
         .execute(&pool)
         .await?;
+    eprintln!("Database ready");
     Ok(pool)
 }
 

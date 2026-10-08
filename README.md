@@ -91,7 +91,7 @@ The software is free under MIT. Hosting and database providers have their own pl
 The button starts a guided install: it clones this repository, offers a PostgreSQL integration, and asks for your host credentials. You still need GitHub/Vercel accounts and must review the database provider’s plan and terms. It is not a zero-configuration install.
 
 1. Choose your GitHub repository name and Vercel team.
-2. Create or connect a PostgreSQL database in the integration step. Select a plan and region that fit your use. Confirm the connection provides a `DATABASE_URL` environment variable; add the provider’s TLS connection string under that name if needed.
+2. Create or connect a PostgreSQL database in the integration step. Select a plan and region that fit your use. Neon automatically adds `DATABASE_URL` for application queries and `DATABASE_URL_UNPOOLED` for schema migrations. With another provider, set `DATABASE_URL` to its TLS connection string; if it uses a transaction pooler, also set `DATABASE_URL_UNPOOLED` to its direct connection string.
 3. Set `ADMIN_PASSWORD` to a unique password of at least 16 characters. Set `SESSION_SECRET` to a separate random value of at least 32 bytes; `openssl rand -hex 32` generates one. Keep both private.
 4. Keep the automatically detected **Rust** framework and the repository root, then deploy. There is no frontend build command. The Rust function creates the schema on first startup.
 5. Open the deployment, sign in, and follow **Your first open house** above. Scan the QR code from a phone to confirm it opens the public deployment, not localhost.
