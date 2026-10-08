@@ -190,6 +190,8 @@ async fn persisted_registration_access_and_consent() {
         agent_phone: "555-0100".into(),
         broker_email: "broker@example.com".into(),
         show_location: true,
+        show_agent_photo: false,
+        show_brokerage_logo: false,
         agent_photo_url: "https://example.com/agent.png".into(),
         logo_url: "https://example.com/brokerage.png".into(),
         ..Settings::default()
@@ -247,6 +249,8 @@ async fn persisted_registration_access_and_consent() {
     let guest: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(guest["settings"]["broker_license"], "DEMO-456");
     assert_eq!(guest["settings"]["show_location"], true);
+    assert_eq!(guest["settings"]["show_agent_photo"], false);
+    assert_eq!(guest["settings"]["show_brokerage_logo"], false);
     assert_eq!(
         guest["settings"]["agent_photo_url"],
         "https://example.com/agent.png"

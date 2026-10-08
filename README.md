@@ -4,7 +4,26 @@ A welcoming check-in page for visitors, and a clear workspace for the host. Buil
 
 **Development preview.** Local database and browser checks are recorded in commit history; the provider deployment paths still need a fresh-account end-to-end trial before a public template release. This repository is private during preparation, so the public Deploy buttons become usable by other people after publication.
 
-![Visitor page concept](design/visitor-page-v1.png)
+![Open Houseworks shared-tablet check-in](docs/screenshots/kiosk.png)
+
+Actual app screenshot with fictional demo details. New installations start with an empty workspace.
+
+[Deploy your own](#deploy-your-own) · [Run locally](#run-locally) · [Architecture](#architecture)
+
+## Your first open house
+
+1. Deploy the app and sign in with the host password you chose.
+2. Open **Customize** to add your brokerage, contact details, and optional license numbers. Agent photos and brokerage logos have independent on/off switches; built-in placeholders appear when enabled without an image.
+3. Create an open house with its address, time, and optional property photo. Set check-in to **Open**.
+4. Launch the shared-device kiosk or print the QR sign for visitors to use their own phones.
+5. Return to the host workspace to view registrations and download CSV.
+
+<details>
+<summary>Visitor check-in on a phone</summary>
+
+<img src="docs/screenshots/visitor.png" alt="Visitor check-in on a phone" width="360">
+
+</details>
 
 ## What it does
 
@@ -15,7 +34,7 @@ A welcoming check-in page for visitors, and a clear workspace for the host. Buil
 - Print a real QR sign pointing to that page.
 - Search visitor registrations, export CSV, and permanently delete individual records.
 - Customize brokerage name, logo, brand color, welcome message, and privacy notice.
-- Add optional HTTPS image links under **Customize** for an agent headshot beside their name and a brokerage logo beside the brokerage name. Photos are cropped to a circle; logos stay uncropped. These appear on visitor pages, the kiosk, and the QR sign.
+- Add optional HTTPS image links under **Customize** for an agent headshot beside their name and a brokerage logo beside the brokerage name. Photos are cropped to a circle; logos stay uncropped. These appear on visitor pages, the kiosk, and the QR sign. Each image has its own visibility toggle. When enabled, an empty or unavailable image uses a built-in placeholder; turning it off hides both without erasing its saved URL.
 - Optionally show city and state beside the address on visitor pages and the QR sign. It starts hidden; enable it under **Customize → Your welcome**.
 - Optionally show agent name, agent license number, phone, and email; broker name, broker license number, phone, and email. Empty fields disappear from the visitor page.
 - Choose whether to ask visitors for a phone number, buying timeline, and agent representation. These answers are optional.
@@ -67,9 +86,17 @@ The software is free under MIT. Hosting and database providers have their own pl
 
 ### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FBenBreaksIn%2Fopen-house-register&project-name=open-house-register&repository-name=open-house-register&env=DATABASE_URL%2CADMIN_PASSWORD%2CSESSION_SECRET&envDescription=Set%20a%20PostgreSQL%20URL%2C%20a%20host%20password%20%2816%2B%20characters%29%2C%20and%20a%20separate%20random%20SESSION_SECRET%20%2832%2B%20bytes%29.)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FBenBreaksIn%2Fopen-house-register&project-name=open-house-register&repository-name=open-house-register&env=ADMIN_PASSWORD%2CSESSION_SECRET&envDescription=Choose+a+unique+host+password+%2816%2B+characters%29+and+a+separate+random+session+secret+%2832%2B+bytes%29.+Connect+PostgreSQL+in+the+setup+flow.&envLink=https%3A%2F%2Fgithub.com%2FBenBreaksIn%2Fopen-house-register%23vercel&products=%5B%7B%22type%22%3A%22integration%22%2C%22protocol%22%3A%22storage%22%2C%22group%22%3A%22postgres%22%7D%5D)
 
-The button clones the project and starts Vercel setup. Connect a PostgreSQL database (for example, through Vercel Marketplace) and provide its `DATABASE_URL`; choose your `ADMIN_PASSWORD` and a separate random `SESSION_SECRET`. Database provisioning is not automated by this button. Use a connection string with TLS enabled for a remote database, and place the database close to the function region.
+The button starts a guided install: it clones this repository, offers a PostgreSQL integration, and asks for your host credentials. You still need GitHub/Vercel accounts and must review the database provider’s plan and terms. It is not a zero-configuration install.
+
+1. Choose your GitHub repository name and Vercel team.
+2. Create or connect a PostgreSQL database in the integration step. Select a plan and region that fit your use. Confirm the connection provides a `DATABASE_URL` environment variable; add the provider’s TLS connection string under that name if needed.
+3. Set `ADMIN_PASSWORD` to a unique password of at least 16 characters. Set `SESSION_SECRET` to a separate random value of at least 32 bytes; `openssl rand -hex 32` generates one. Keep both private.
+4. Deploy with the **Other** framework preset and the repository root. There is no frontend build command. The Rust function creates the schema on first startup.
+5. Open the deployment, sign in, and follow **Your first open house** above. Scan the QR code from a phone to confirm it opens the public deployment, not localhost.
+
+Keep deployment access appropriate for visitors: test without a Vercel login before sharing the QR. The app’s host workspace always requires its own password.
 
 Vercel's official Rust runtime is currently **beta**. `api/index.rs` adapts the same Axum router used locally to that runtime. No Node backend, frontend build, or persistent local filesystem is required. Assets are embedded in the Rust executable.
 

@@ -22,6 +22,8 @@ pub struct Settings {
     pub welcome: String,
     pub privacy_note: String,
     pub show_location: bool,
+    pub show_agent_photo: bool,
+    pub show_brokerage_logo: bool,
     pub ask_phone: bool,
     pub ask_timeline: bool,
     pub ask_agent: bool,
@@ -45,6 +47,8 @@ impl Default for Settings {
             privacy_note:
                 "Your details go to the host of this open house. Follow-up is your choice.".into(),
             show_location: false,
+            show_agent_photo: true,
+            show_brokerage_logo: true,
             ask_phone: true,
             ask_timeline: true,
             ask_agent: true,

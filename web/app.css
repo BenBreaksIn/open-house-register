@@ -874,6 +874,11 @@
     object-fit: cover;
     border-radius: 50%;
   }
+  .contact-placeholder {
+    background: var(--sage);
+    color: var(--brand-ink, var(--brand));
+    border-radius: 6px;
+  }
   .contact-image[hidden] {
     display: none;
   }
