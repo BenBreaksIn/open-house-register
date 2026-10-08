@@ -1,16 +1,11 @@
 use axum::{
     Router,
     body::Body,
+    extract::ConnectInfo,
     http::{Request, StatusCode, header},
 };
 use http_body_util::BodyExt;
-use open_house_register::{
-    AppState,
-    config::{Config, digest},
-    db,
-    models::Settings,
-    router,
-};
+use open_house_register::{AppState, config::Config, db, models::Settings, router};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -24,6 +19,9 @@ async fn request(
     csrf: bool,
 ) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
     let mut req = Request::builder()
+        .extension(ConnectInfo(
+            "127.0.0.1:1234".parse::<std::net::SocketAddr>().unwrap(),
+        ))
         .method(method)
         .uri(path)
         .header(header::CONTENT_TYPE, "application/json");
@@ -47,13 +45,14 @@ async fn request(
 #[tokio::test]
 #[ignore = "requires an isolated PostgreSQL TEST_DATABASE_URL"]
 async fn persisted_registration_access_and_consent() {
-    let config = Config {
-        database_url: std::env::var("TEST_DATABASE_URL")
+    let config = Config::new(
+        std::env::var("TEST_DATABASE_URL")
             .expect("TEST_DATABASE_URL must point to a test database"),
-        password_hash: digest("integration-test-password"),
-        base_url: "https://openhouse.example.com".into(),
-        secure_cookie: true,
-    };
+        "integration-test-password",
+        "independent-registration-test-secret-only",
+        "https://openhouse.example.com",
+    )
+    .unwrap();
     let pool = db::connect(&config).await.unwrap();
     let app = router(AppState {
         pool: pool.clone(),
@@ -190,6 +189,11 @@ async fn persisted_registration_access_and_consent() {
         broker_license: "DEMO-456".into(),
         agent_phone: "555-0100".into(),
         broker_email: "broker@example.com".into(),
+        show_location: true,
+        show_agent_photo: false,
+        show_brokerage_logo: false,
+        agent_photo_url: "https://example.com/agent.png".into(),
+        logo_url: "https://example.com/brokerage.png".into(),
         ..Settings::default()
     };
     let (s, _, _) = request(
@@ -244,6 +248,17 @@ async fn persisted_registration_access_and_consent() {
     assert_eq!(s, StatusCode::OK);
     let guest: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(guest["settings"]["broker_license"], "DEMO-456");
+    assert_eq!(guest["settings"]["show_location"], true);
+    assert_eq!(guest["settings"]["show_agent_photo"], false);
+    assert_eq!(guest["settings"]["show_brokerage_logo"], false);
+    assert_eq!(
+        guest["settings"]["agent_photo_url"],
+        "https://example.com/agent.png"
+    );
+    assert_eq!(
+        guest["settings"]["logo_url"],
+        "https://example.com/brokerage.png"
+    );
     assert!(guest.get("visitors").is_none());
     assert!(guest.get("password").is_none());
     let (s, _, body) = request(

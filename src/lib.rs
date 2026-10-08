@@ -1,5 +1,6 @@
 pub mod api;
 pub mod auth;
+pub mod client_ip;
 pub mod config;
 pub mod db;
 pub mod models;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub config: config::Config,
 }
 
+#[derive(Debug)]
 pub struct ApiError {
     status: StatusCode,
     message: String,

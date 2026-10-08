@@ -2,6 +2,12 @@ import { createKioskController } from "/assets/kiosk.js";
 import { kioskView } from "/assets/kiosk-view.js";
 const app = document.querySelector("#app");
 let data, selected, toastTimer, kiosk;
+let hostEpoch = 0, hostRequest, hostDraft;
+const sessionChannel = typeof BroadcastChannel === "function" ? new BroadcastChannel("houseworks-session") : null;
+function announceSignout() {
+  sessionChannel?.postMessage("signed-out");
+  try { localStorage.setItem("houseworks-signout", crypto.randomUUID()); } catch {}
+}
 const kioskRoute = location.pathname.match(/^\/kiosk\/([0-9a-f-]{36})$/i);
 const $ = (selector, root = document) => root.querySelector(selector);
 const esc = (value) =>
@@ -116,15 +122,27 @@ function input(name, label, value = "", options = {}) {
 function optional(label) {
   return `${label} <span class="optional">(optional)</span>`;
 }
+function contactIdentity(name, imageUrl, kind, showImage = true) {
+  if (!showImage) imageUrl = "";
+  if (!name && !imageUrl) return "";
+  const fallback = kind === "agent-photo" ? "Agent photo" : "Brokerage logo";
+  const mark = kind === "agent-photo"
+    ? '<circle cx="24" cy="18" r="7"/><path d="M10 42v-4a14 14 0 0 1 28 0v4"/>'
+    : '<path d="m10 22 14-12 14 12M14 20v18h20V20M21 38V27h6v11"/>';
+  const placeholder = showImage ? `<svg class="contact-image contact-placeholder ${kind}" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${imageUrl ? "hidden" : ""}>${mark}</svg>` : "";
+  return `<div class="contact-identity">${placeholder}${imageUrl ? `<img class="contact-image ${kind}" src="${esc(imageUrl)}" alt="${name ? "" : fallback}" width="48" height="48" referrerpolicy="no-referrer">` : ""}${name ? `<h3>${esc(name)}</h3>` : ""}</div>`;
+}
 function contact(s) {
   const agent = !!(
     s.host_name ||
+    (s.show_agent_photo && s.agent_photo_url) ||
     s.agent_license ||
     s.agent_phone ||
     s.contact_email
   );
   const broker = !!(
     s.business_name ||
+    (s.show_brokerage_logo && s.logo_url) ||
     s.broker_name ||
     s.broker_license ||
     s.broker_phone ||
@@ -133,7 +151,7 @@ function contact(s) {
   if (!agent && !broker) return "";
   const links = (email, phone) =>
     `<div class="contact-links">${email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : ""}${phone ? `<a href="tel:${esc(phone.replace(/[^+\d]/g, ""))}">${esc(phone)}</a>` : ""}</div>`;
-  return `<footer class="host-contact">${agent ? `<div class="agent"><span class="eyebrow">Your host</span>${s.host_name ? `<h3>${esc(s.host_name)}</h3>` : ""}${s.agent_license ? `<p>Agent license: ${esc(s.agent_license)}</p>` : ""}${links(s.contact_email, s.agent_phone)}</div>` : ""}${broker ? `<div class="${agent ? "broker" : ""}">${s.business_name ? `<h3>${esc(s.business_name)}</h3>` : ""}${s.broker_name ? `<p>Broker: ${esc(s.broker_name)}</p>` : ""}${s.broker_license ? `<p>Broker license: ${esc(s.broker_license)}</p>` : ""}${links(s.broker_email, s.broker_phone)}</div>` : ""}</footer>`;
+  return `<footer class="host-contact">${agent ? `<div class="agent"><span class="eyebrow">Your host</span>${contactIdentity(s.host_name, s.agent_photo_url, "agent-photo", s.show_agent_photo)}${s.agent_license ? `<p>Agent license: ${esc(s.agent_license)}</p>` : ""}${links(s.contact_email, s.agent_phone)}</div>` : ""}${broker ? `<div class="${agent ? "broker" : ""}">${contactIdentity(s.business_name, s.logo_url, "brokerage-logo", s.show_brokerage_logo)}${s.broker_name ? `<p>Broker: ${esc(s.broker_name)}</p>` : ""}${s.broker_license ? `<p>Broker license: ${esc(s.broker_license)}</p>` : ""}${links(s.broker_email, s.broker_phone)}</div>` : ""}</footer>`;
 }
 function guestForm(s, preview = false, shared = false) {
   const prefix = preview ? "preview-" : "";
@@ -149,8 +167,11 @@ function guestForm(s, preview = false, shared = false) {
  <p class="form-error" aria-live="polite"></p>
  <button class="btn primary full guest-submit" type="submit">Check in</button><p class="no-account">No account needed.</p></form>`;
 }
+function propertyTitle(h, s) {
+  return `<div class="property-title"><h1>${esc(h.address)}</h1>${s.show_location && h.location ? `<p class="property-location">${esc(h.location)}</p>` : ""}</div>`;
+}
 function guestHeader(h, s) {
-  return `${h.photo_url ? `<img class="guest-photo" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : ""}<div class="guest-main">${s.logo_url ? `<img class="guest-logo" src="${esc(s.logo_url)}" alt="${esc(s.business_name || "Host logo")}">` : ""}${s.business_name ? `<p class="guest-brand">${esc(s.business_name)}</p>` : ""}<h1>Welcome to<br>${esc(h.address)}</h1><p class="place">${esc(h.location)}</p><p class="date">${esc(dateLabel(h))}</p>${s.welcome ? `<p class="guest-welcome">${esc(s.welcome)}</p>` : "<hr>"}`;
+  return `${h.photo_url ? `<img class="guest-photo" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : ""}<div class="guest-main"><p class="guest-kicker">Welcome to</p>${propertyTitle(h, s)}<p class="date">${esc(dateLabel(h))}</p>${s.welcome ? `<p class="guest-welcome">${esc(s.welcome)}</p>` : "<hr>"}`;
 }
 async function loadGuest(id, print = false, shared = false) {
   try {
@@ -165,12 +186,13 @@ async function loadGuest(id, print = false, shared = false) {
         form: guestForm(s, false, true),
         contact: contact(s),
         dateLabel,
+        propertyTitle,
       });
       kiosk.rendered();
       return;
     }
     if (print) {
-      app.innerHTML = `<div class="print-controls row"><a class="btn" href="/">Back to workspace</a><button class="btn primary" data-action="print">Print sign</button></div><main id="main" class="print-sheet"><p class="eyebrow">${esc(s.business_name || "You’re invited")}</p><h1>Come on in.</h1><p>${esc(h.address)} · ${esc(h.location)}</p><p class="muted">${esc(dateLabel(h))}</p><img class="qr" src="/api/public/houses/${h.id}/qr.svg" alt="Scan to check in at this open house"><h2>Scan to check in</h2><p class="sub">A quick hello. No account needed.</p><p class="url">${esc(location.origin)}/visit/${h.id}</p>${contact(s)}</main>`;
+      app.innerHTML = `<div class="print-controls row"><a class="btn" href="/">Back to workspace</a><button class="btn primary" data-action="print">Print sign</button></div><main id="main" class="print-sheet"><p class="eyebrow">${esc(s.business_name || "You’re invited")}</p><h1>Come on in.</h1><p>${esc(h.address)}${s.show_location && h.location ? ` · <span class="property-location">${esc(h.location)}</span>` : ""}</p><p class="muted">${esc(dateLabel(h))}</p><img class="qr" src="/api/public/houses/${h.id}/qr.svg" alt="Scan to check in at this open house"><h2>Scan to check in</h2><p class="sub">A quick hello. No account needed.</p><p class="url">${esc(location.origin)}/visit/${h.id}</p>${contact(s)}</main>`;
       return;
     }
     app.innerHTML = `<main id="main" class="guest-shell">${guestHeader(h, s)}${h.status === "open" ? guestForm(s) : '<section class="thank-you"><h2>Thanks for your interest.</h2><p>Check-in for this open house has closed. You can reach the host below.</p></section>'}${h.note ? `<p class="small-note">${esc(h.note)}</p>` : ""}${contact(s)}<p class="guest-foot">Open Houseworks</p></div></main>`;
@@ -211,8 +233,10 @@ function dashboard() {
       "/",
     );
   const visitors = data.visitors.filter((v) => v.house_id === h.id);
+  const capacity = data.capacity;
+  const capacityNote = capacity ? `<p class="small-note" role="status">${Number(capacity.events[h.id] || 0).toLocaleString()} of ${Number(capacity.event_limit).toLocaleString()} registrations for this open house · ${Number(capacity.total).toLocaleString()} of ${Number(capacity.total_limit).toLocaleString()} across your workspace.${Number(capacity.events[h.id] || 0) >= capacity.event_limit || capacity.total >= capacity.total_limit ? " Check-in is full. Export and remove records you no longer need, or ask your administrator to increase capacity." : ""}</p>` : "";
   return shell(
-    `${heading}<div class="rule"><div class="row"><div class="house-picker"><label class="hidden" for="house-selector">Choose an open house</label><select id="house-selector">${data.houses.map((x) => `<option value="${x.id}" ${x.id === h.id ? "selected" : ""}>${esc(x.address)} · ${esc(x.status)}</option>`).join("")}</select></div><span class="spacer"></span><button class="btn quiet" data-action="edit-house" data-id="${h.id}">Edit details</button></div><section class="property"><div>${h.photo_url ? `<img class="property-image" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : `<div class="photo-empty">${icon("home")}</div>`}${h.photo_url === "/assets/sample-house.png" ? '<p class="small-note">Illustrative sample photo</p>' : ""}</div><div><h2>${esc(h.address)}</h2><p class="place">${esc(h.location)}</p><p class="date">${esc(dateLabel(h))}</p><p class="small-note">${h.status === "open" ? "Accepting check-ins" : h.status === "draft" ? "Draft · only visible to you" : "Check-in closed"}</p>${h.status === "draft" ? `<div class="row property-actions"><button class="btn primary" data-action="publish-house" data-id="${h.id}">Open check-in page ${icon("arrow")}</button></div>` : `<div class="checkin-options"><section class="checkin-option"><h3>Use this device</h3><a class="btn primary" href="/kiosk/${h.id}">${icon("expand")} Launch kiosk</a><p>Let visitors type on your tablet or computer. Signs this device out of the host workspace.</p></section><section class="checkin-option"><h3>Use their own phone</h3><a class="btn" target="_blank" rel="noopener" href="/sign/${h.id}">${icon("qr")} Share QR code</a><p>Display or print the code. Visitors check in on their own device.</p></section></div><a class="phone-preview-link" target="_blank" rel="noopener" href="/visit/${h.id}">Preview phone check-in</a>`}<div class="stats"><div class="stat"><strong>${visitors.length}</strong><span>Visitors</span></div><div class="stat"><strong>${visitors.filter((v) => v.follow_up).length}</strong><span>Requested follow-up</span></div><div class="stat"><strong>${visitors.filter((v) => v.timeline === "0–3 months").length}</strong><span>Buying in 0–3 months</span></div></div></div></section><section class="rule"><div class="section-head"><h2>Your visitors</h2><div class="table-tools"><label class="hidden" for="visitor-search">Search visitors</label><input id="visitor-search" type="search" placeholder="Search by name or email…"><a class="btn" href="/api/admin/houses/${h.id}/export">${icon("download")} Export CSV</a></div></div>${visitorsTable(visitors)}</section></div>`,
+    `${heading}${capacityNote}<div class="rule"><div class="row"><div class="house-picker"><label class="hidden" for="house-selector">Choose an open house</label><select id="house-selector">${data.houses.map((x) => `<option value="${x.id}" ${x.id === h.id ? "selected" : ""}>${esc(x.address)} · ${esc(x.status)}</option>`).join("")}</select></div><span class="spacer"></span><button class="btn quiet" data-action="edit-house" data-id="${h.id}">Edit details</button></div><section class="property"><div>${h.photo_url ? `<img class="property-image" src="${esc(h.photo_url)}" alt="${esc(h.address)}">` : `<div class="photo-empty">${icon("home")}</div>`}${h.photo_url === "/assets/sample-house.png" ? '<p class="small-note">Illustrative sample photo</p>' : ""}</div><div><h2>${esc(h.address)}</h2><p class="place">${esc(h.location)}</p><p class="date">${esc(dateLabel(h))}</p><p class="small-note">${h.status === "open" ? "Accepting check-ins" : h.status === "draft" ? "Draft · only visible to you" : "Check-in closed"}</p>${h.status === "draft" ? `<div class="row property-actions"><button class="btn primary" data-action="publish-house" data-id="${h.id}">Open check-in page ${icon("arrow")}</button></div>` : `<div class="checkin-options"><section class="checkin-option"><h3>Use this device</h3><a class="btn primary" href="/kiosk/${h.id}">${icon("expand")} Launch kiosk</a><p>Let visitors type on your tablet or computer. Signs this device out of the host workspace.</p></section><section class="checkin-option"><h3>Use their own phone</h3><a class="btn" target="_blank" rel="noopener" href="/sign/${h.id}">${icon("qr")} Share QR code</a><p>Display or print the code. Visitors check in on their own device.</p></section></div><a class="phone-preview-link" target="_blank" rel="noopener" href="/visit/${h.id}">Preview phone check-in</a>`}<div class="stats"><div class="stat"><strong>${visitors.length}</strong><span>Visitors</span></div><div class="stat"><strong>${visitors.filter((v) => v.follow_up).length}</strong><span>Requested follow-up</span></div><div class="stat"><strong>${visitors.filter((v) => v.timeline === "0–3 months").length}</strong><span>Buying in 0–3 months</span></div></div></div></section><section class="rule"><div class="section-head"><h2>Your visitors</h2><div class="table-tools"><label class="hidden" for="visitor-search">Search visitors</label><input id="visitor-search" type="search" placeholder="Search by name or email…"><a class="btn" href="/api/admin/houses/${h.id}/export">${icon("download")} Export CSV</a></div></div>${visitorsTable(visitors)}</section></div>`,
     "/",
   );
 }
@@ -241,7 +265,7 @@ function customize() {
   const toggle = (name, label) =>
     `<label class="choice"><input type="checkbox" role="switch" name="${name}" ${s[name] ? "checked" : ""}>${label}</label>`;
   return shell(
-    `<header class="heading"><div><h1>Make yourself at home.</h1><p class="sub">Your name. Your colors. Your welcome.</p></div><span id="saved-state" class="success-line">Saved</span><button class="btn primary hidden" id="save-settings" form="settings-form" type="submit">Save changes</button></header><div class="customize-layout"><form id="settings-form"><section class="form-section"><h2>Your brand</h2><p class="muted">Every field is optional. Empty details stay hidden from visitors.</p><div class="pair">${field("business_name", "Brokerage name")}${field("logo_url", "Logo URL", "url", 2048)}</div><label for="color">Brand color</label><div class="color-options">${["#214d3b", "#24405f", "#a1442c", "#30312e"].map((c) => `<button class="swatch" type="button" style="--swatch:${c}" data-action="color" data-color="${c}" aria-label="Use ${c}" aria-pressed="${s.color.toLowerCase() === c}"></button>`).join("")}<input type="color" name="color" id="color" value="${esc(s.color)}" aria-label="Custom brand color"></div></section><section class="form-section"><h2>Your contact details</h2><p class="muted">Give visitors a way to reach you after they stop by.</p><div class="pair">${field("host_name", "Agent name")}${field("agent_license", "Agent license number", "text", 64)}</div><div class="pair">${field("contact_email", "Agent email", "email", 254)}${field("agent_phone", "Agent phone", "tel", 40)}</div></section><section class="form-section"><h2>Your broker</h2><p class="muted">Add the broker details you want displayed on your check-in page.</p><div class="pair">${field("broker_name", "Broker name")}${field("broker_license", "Broker license number", "text", 64)}</div><div class="pair">${field("broker_email", "Broker email", "email", 254)}${field("broker_phone", "Broker phone", "tel", 40)}</div></section><section class="form-section"><h2>Visitor form</h2><p class="muted">Keep it short. Choose the extra questions that help.</p>${toggle("ask_phone", "Ask for a phone number")}${toggle("ask_timeline", "Ask about buying timeline")}${toggle("ask_agent", "Ask about agent representation")}<p class="small-note">These answers are optional. Follow-up permission is always optional and starts unchecked.</p></section><section class="form-section"><h2>Your welcome</h2><p class="muted">A little hospitality, before they walk through the door.</p><div class="stack"><label for="welcome">Welcome message<textarea id="welcome" name="welcome" maxlength="300">${esc(s.welcome)}</textarea></label><label for="privacy_note">How visitor details are used<textarea id="privacy_note" name="privacy_note" maxlength="600" required>${esc(s.privacy_note)}</textarea></label></div></section><p class="form-error" aria-live="polite"></p></form><aside class="preview-column"><h3>Live preview</h3><p>Example of your visitor’s separate check-in page.</p><div class="preview" id="brand-preview">${preview(s)}</div></aside></div>`,
+    `<header class="heading"><div><h1>Make yourself at home.</h1><p class="sub">Your name. Your colors. Your welcome.</p></div></header><div class="customize-layout"><form id="settings-form"><section class="form-section"><h2>Your brand</h2><p class="muted">Every field is optional. Empty details stay hidden from visitors.</p>${toggle("show_brokerage_logo", "Show brokerage logo or placeholder")}<div class="pair">${field("business_name", "Brokerage name")}${field("logo_url", "Brokerage logo URL", "url", 2048)}</div><p class="small-note">Use a direct HTTPS image link. Your logo appears beside the brokerage name without cropping.</p><label for="color">Brand color</label><div class="color-options">${["#214d3b", "#24405f", "#a1442c", "#30312e"].map((c) => `<button class="swatch" type="button" style="--swatch:${c}" data-action="color" data-color="${c}" aria-label="Use ${c}" aria-pressed="${s.color.toLowerCase() === c}"></button>`).join("")}<input type="color" name="color" id="color" value="${esc(s.color)}" aria-label="Custom brand color"></div></section><section class="form-section"><h2>Your contact details</h2><p class="muted">Give visitors a way to reach you after they stop by.</p><div class="pair">${field("host_name", "Agent name")}${field("agent_license", "Agent license number", "text", 64)}</div>${toggle("show_agent_photo", "Show agent photo or placeholder")}${field("agent_photo_url", "Agent photo URL", "url", 2048)}<p class="small-note">Use a direct HTTPS image link. A square headshot works best; it appears in a circle beside your name.</p><div class="pair">${field("contact_email", "Agent email", "email", 254)}${field("agent_phone", "Agent phone", "tel", 40)}</div></section><section class="form-section"><h2>Your broker</h2><p class="muted">Add the broker details you want displayed on your check-in page.</p><div class="pair">${field("broker_name", "Broker name")}${field("broker_license", "Broker license number", "text", 64)}</div><div class="pair">${field("broker_email", "Broker email", "email", 254)}${field("broker_phone", "Broker phone", "tel", 40)}</div></section><section class="form-section"><h2>Visitor form</h2><p class="muted">Keep it short. Choose the extra questions that help.</p>${toggle("ask_phone", "Ask for a phone number")}${toggle("ask_timeline", "Ask about buying timeline")}${toggle("ask_agent", "Ask about agent representation")}<p class="small-note">These answers are optional. Follow-up permission is always optional and starts unchecked.</p></section><section class="form-section"><h2>Your welcome</h2><p class="muted">A little hospitality, before they walk through the door.</p>${toggle("show_location", "Show city and state beside the address")}<div class="stack"><label for="welcome">Welcome message<textarea id="welcome" name="welcome" maxlength="300">${esc(s.welcome)}</textarea></label><label for="privacy_note">How visitor details are used<textarea id="privacy_note" name="privacy_note" maxlength="600" required>${esc(s.privacy_note)}</textarea></label></div></section><footer class="settings-actions"><p class="form-error" aria-live="polite"></p><span id="saved-state" class="success-line" role="status">Saved</span><button class="btn primary hidden" id="save-settings" type="submit">Save changes</button></footer></form><aside class="preview-column"><h3>Live preview</h3><p>Example of your visitor’s separate check-in page.</p><div class="preview" id="brand-preview">${preview(s)}</div></aside></div>`,
     "/customize",
   );
 }
@@ -257,7 +281,7 @@ function settingsChanged() {
   const s = readSettings();
   $("#brand-preview").innerHTML = preview(s);
   brandColor(s.color, $("#brand-preview"));
-  $("#saved-state").classList.add("hidden");
+  $("#saved-state").textContent = "Unsaved changes";
   $("#save-settings").classList.remove("hidden");
   document
     .querySelectorAll(".swatch")
@@ -276,14 +300,21 @@ function houseDialog(id) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dialog = document.createElement("dialog");
   dialog.id = "house-dialog";
-  dialog.innerHTML = `<div class="section-head"><h2>${h ? "Edit open house" : "Open a new door."}</h2><button class="icon-button" data-action="close-dialog" aria-label="Close">${icon("close")}</button></div><form id="house-form" class="stack" ${id ? `data-id="${id}"` : ""}>${input("address", "Property address", h?.address || "", { required: true, max: 160, placeholder: "248 Olive Avenue" })}${input("location", "City and state", h?.location || "", { required: true, max: 160, placeholder: "Oakland, CA" })}<div class="pair">${input("starts_at", "Starts", h ? localDate(h.starts_at) : "", { type: "datetime-local", required: true })}${input("ends_at", "Ends", h ? localDate(h.ends_at) : "", { type: "datetime-local", required: true })}</div><p class="small-note">Times are entered in ${esc(zone)}.</p>${input("photo_url", optional("Property photo URL"), h?.photo_url === "/assets/sample-house.png" ? "" : h?.photo_url || "", { type: "url", max: 2048, placeholder: "https://…" })}<label class="choice"><input name="sample_photo" type="checkbox" ${h?.photo_url === "/assets/sample-house.png" ? "checked" : ""}>Use the illustrative sample photo</label><label for="house-note">${optional("A note for visitors")}<textarea name="note" id="house-note" maxlength="1000" placeholder="Please enter through the front door.">${esc(h?.note || "")}</textarea></label><label for="house-status">Check-in availability<select id="house-status" name="status"><option value="open" ${!h || h.status === "open" ? "selected" : ""}>Open — accept visitors</option><option value="draft" ${h?.status === "draft" ? "selected" : ""}>Draft — visible only to you</option><option value="closed" ${h?.status === "closed" ? "selected" : ""}>Closed — show property and contact details</option></select></label><p class="small-note">You control when check-in opens and closes.</p><p class="form-error" aria-live="polite"></p><div class="row actions"><button type="button" class="btn" data-action="close-dialog">Cancel</button><span class="spacer"></span><button class="btn primary" type="submit">${h ? "Save changes" : "Create open house"}</button></div></form>`;
+  dialog.setAttribute("aria-labelledby", "house-dialog-title");
+  dialog.innerHTML = `<div class="section-head"><h2 id="house-dialog-title">${h ? "Edit open house" : "Open a new door."}</h2><button class="icon-button" data-action="close-dialog" aria-label="Close">${icon("close")}</button></div><form id="house-form" class="dialog-form" ${id ? `data-id="${id}"` : ""}><div class="dialog-fields stack">${input("address", "Property address", h?.address || "", { required: true, max: 160, placeholder: "248 Olive Avenue" })}${input("location", "City and state", h?.location || "", { required: true, max: 160, placeholder: "Oakland, CA" })}<div class="pair">${input("starts_at", "Starts", h ? localDate(h.starts_at) : "", { type: "datetime-local", required: true })}${input("ends_at", "Ends", h ? localDate(h.ends_at) : "", { type: "datetime-local", required: true })}</div><p class="small-note">Times are entered in ${esc(zone)}.</p>${input("photo_url", optional("Property photo URL"), h?.photo_url === "/assets/sample-house.png" ? "" : h?.photo_url || "", { type: "url", max: 2048, placeholder: "https://…" })}<label class="choice"><input name="sample_photo" type="checkbox" ${h?.photo_url === "/assets/sample-house.png" ? "checked" : ""}>Use the illustrative sample photo</label><label for="house-note">${optional("A note for visitors")}<textarea name="note" id="house-note" maxlength="1000" placeholder="Please enter through the front door.">${esc(h?.note || "")}</textarea></label><label for="house-status">Check-in availability<select id="house-status" name="status"><option value="open" ${!h || h.status === "open" ? "selected" : ""}>Open — accept visitors</option><option value="draft" ${h?.status === "draft" ? "selected" : ""}>Draft — visible only to you</option><option value="closed" ${h?.status === "closed" ? "selected" : ""}>Closed — show property and contact details</option></select></label><p class="small-note">You control when check-in opens and closes.</p></div><div class="row actions"><p class="form-error" aria-live="polite"></p><button type="button" class="btn" data-action="close-dialog">Cancel</button><span class="spacer"></span><button class="btn primary" type="submit">${h ? "Save changes" : "Create open house"}</button></div></form>`;
   document.body.append(dialog);
   dialog.showModal();
   dialog.addEventListener("close", () => dialog.remove());
 }
 async function loadHost() {
+  if (document.hidden) return;
+  const epoch = ++hostEpoch;
+  hostRequest?.abort();
+  hostRequest = new AbortController();
   try {
-    data = await api("/api/admin/dashboard");
+    const fresh = await api("/api/admin/dashboard", { signal: hostRequest.signal });
+    if (epoch !== hostEpoch || document.hidden) return;
+    data = fresh;
     const remembered = localStorage.getItem("houseworks-house");
     selected = selected || remembered;
     brandColor(data.settings.color);
@@ -294,10 +325,56 @@ async function loadHost() {
         : location.pathname === "/visitors"
           ? allVisitors()
           : dashboard();
+    restoreHostDraft();
   } catch (error) {
+    if (epoch !== hostEpoch || document.hidden) return;
+    data = null;
+    if (error.status === 401) hostDraft = null;
     if (error.status === 401) loginPage();
     else loginPage(error.message);
   }
+}
+function hideHost(preserveDraft = true) {
+  // Retain only editable host fields in memory. Never retain the visitor payload
+  // or private DOM while a tab is hidden or a kiosk is taking over the browser.
+  const form = $("#house-form") || $("#settings-form");
+  if (!preserveDraft) hostDraft = null;
+  else if (form) {
+    hostDraft = {
+      type: form.id,
+      id: form.dataset.id,
+      dirty: form.id === "settings-form" && !$("#save-settings").classList.contains("hidden"),
+      fields: [...form.elements].filter((el) => el.name).map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]),
+    };
+  }
+  ++hostEpoch;
+  hostRequest?.abort();
+  $("#house-dialog")?.remove();
+  app.replaceChildren();
+  data = null;
+}
+function restoreHostDraft() {
+  const draft = hostDraft;
+  hostDraft = null;
+  if (!draft) return;
+  if (draft.type === "house-form") {
+    if (draft.id && !data.houses.some((h) => h.id === draft.id)) return;
+    houseDialog(draft.id);
+  }
+  const form = document.getElementById(draft.type);
+  if (!form) return;
+  for (const [name, value] of draft.fields) {
+    const field = form.elements.namedItem(name);
+    if (field) {
+      if (typeof value === "boolean") field.checked = value;
+      else field.value = value;
+    }
+  }
+  if (draft.dirty) settingsChanged();
+}
+function hostSignedOut() {
+  hideHost(false);
+  if (!document.hidden) loginPage();
 }
 document.addEventListener("submit", async (event) => {
   const form = event.target;
@@ -314,6 +391,7 @@ document.addEventListener("submit", async (event) => {
       : $("button[type=submit]", form);
   button.disabled = true;
   $(".form-error", form).textContent = "";
+  const epoch = hostEpoch;
   try {
     const values = Object.fromEntries(new FormData(form));
     if (form.id === "login-form") {
@@ -335,12 +413,14 @@ document.addEventListener("submit", async (event) => {
       kiosk?.confirmed();
     }
     if (form.id === "settings-form") {
-      data.settings = await api("/api/admin/settings", {
+      const settings = await api("/api/admin/settings", {
         method: "PUT",
         body: JSON.stringify(readSettings()),
       });
+      if (epoch !== hostEpoch || !form.isConnected) return;
+      data.settings = settings;
       brandColor(data.settings.color);
-      $("#saved-state").classList.remove("hidden");
+      $("#saved-state").textContent = "Saved";
       $("#save-settings").classList.add("hidden");
       toast("Your changes are saved.");
     }
@@ -355,6 +435,7 @@ document.addEventListener("submit", async (event) => {
         method: id ? "PUT" : "POST",
         body: JSON.stringify(values),
       });
+      if (epoch !== hostEpoch || !form.isConnected) return;
       selected = h.id;
       localStorage.setItem("houseworks-house", selected);
       $("#house-dialog").close();
@@ -391,7 +472,10 @@ document.addEventListener("click", async (event) => {
       toast("Up to date.");
     }
     if (action === "logout") {
+      hostSignedOut();
+      announceSignout();
       await api("/api/logout", { method: "POST" });
+      announceSignout();
       location.href = "/";
     }
     if (action === "color") {
@@ -423,6 +507,15 @@ document.addEventListener("click", async (event) => {
     toast(error.message);
   }
 });
+// Image errors do not bubble. Capture them so a missing optional image leaves
+// the host details readable with the built-in avatar or logo placeholder.
+document.addEventListener("error", (event) => {
+  if (event.target instanceof HTMLImageElement && event.target.classList.contains("contact-image")) {
+    event.target.hidden = true;
+    const placeholder = event.target.previousElementSibling;
+    if (placeholder?.classList.contains("contact-placeholder")) placeholder.removeAttribute("hidden");
+  }
+}, true);
 document.addEventListener("input", (event) => {
   if (event.target.closest("#settings-form")) settingsChanged();
   if (event.target.id === "visitor-search") {
@@ -462,7 +555,9 @@ async function startKiosk() {
     notice: toast,
   });
   try {
+    announceSignout();
     await api("/api/kiosk/start", { method: "POST" });
+    announceSignout();
     await loadGuest(kioskRoute[1], false, true);
   } catch {
     app.innerHTML =
@@ -474,19 +569,18 @@ else if (publicRoute) loadGuest(publicRoute[2], publicRoute[1] === "sign");
 else {
   loadHost();
   // Cached pages and other host tabs must recheck access after kiosk launch.
-  window.addEventListener("pagehide", () => {
-    app.replaceChildren();
-    data = null;
-  });
+  window.addEventListener("pagehide", () => hideHost());
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) loadHost();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      if (!document.querySelector("#settings-form, #house-dialog")) {
-        app.replaceChildren();
-        data = null;
-      }
-    } else if (!app.children.length) loadHost();
+    if (document.hidden) hideHost();
+    else loadHost();
+  });
+  sessionChannel?.addEventListener("message", (event) => {
+    if (event.data === "signed-out") hostSignedOut();
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === "houseworks-signout") hostSignedOut();
   });
 }
