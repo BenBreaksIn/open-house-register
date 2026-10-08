@@ -2,7 +2,7 @@
 
 A welcoming check-in page for visitors, and a clear workspace for the host. Built with Rust, Axum, and PostgreSQL. Self-host it, customize it, and keep your visitor data in your own database.
 
-**Development preview.** Local database and browser checks are recorded in commit history; the provider deployment paths still need a fresh-account end-to-end trial before a public template release. This repository is private during preparation, so the public Deploy buttons become usable by other people after publication.
+Free, open-source software under MIT. Start with the guided Vercel setup below, or run it on your own PostgreSQL and Docker infrastructure.
 
 ![Open Houseworks shared-tablet check-in](docs/screenshots/kiosk.png)
 
@@ -155,7 +155,7 @@ The dashboard shows up to the most recent 10,000 registrations. Event CSV export
 
 Direct/self-hosted mode uses the socket peer and ignores client-supplied forwarding headers. For your own HTTPS reverse proxy, set `TRUSTED_PROXY_CIDRS` to **only its actual source addresses/networks** and have it overwrite or append the connecting client address to `X-Forwarded-For`. The app walks that chain from the trusted peer toward the first untrusted address. Restrict the app origin to that proxy. Do not use `0.0.0.0/0`, `::/0`, or a network containing untrusted clients. Leaving proxy trust unset safely shares one budget across the proxy's clients, so configure this before public use.
 
-With provider environment flags, Vercel uses `x-vercel-forwarded-for`; Render uses Cloudflare's `CF-Connecting-IP`. These modes require provider ingress to be the only public route. Missing or malformed provider headers fail the request instead of putting every client in one anonymous bucket. See [Vercel request headers](https://vercel.com/docs/headers/request-headers), [Render's Cloudflare ingress](https://render.com/articles/how-render-handles-ddos-attacks), and [Cloudflare origin headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/). Verify two independent client addresses and spoofed-header rejection in your actual provider deployment before release; local tests do not establish provider behavior. Other Docker hosts require an explicit, verified proxy configuration.
+With provider environment flags, Vercel uses `x-vercel-forwarded-for`; Render uses Cloudflare's `CF-Connecting-IP`. These modes require provider ingress to be the only public route. Missing or malformed provider headers fail the request instead of putting every client in one anonymous bucket. See [Vercel request headers](https://vercel.com/docs/headers/request-headers), [Render's Cloudflare ingress](https://render.com/articles/how-render-handles-ddos-attacks), and [Cloudflare origin headers](https://developers.cloudflare.com/fundamentals/reference/http-headers/). Vercel ingress was verified using two independent network clients and rotating spoofed forwarding headers. Verify this again for your own ingress configuration; Render ingress has not been tested live. Other Docker hosts require an explicit, verified proxy configuration.
 
 ## Checks
 
@@ -172,6 +172,8 @@ node --check web/app.js
 The database integration tests are intentionally ignored unless explicitly requested with a separate test database. They exercise authentication, kiosk session revocation, optional brokerage fields, draft/open/closed access, QR generation, saved registration, duplicate consent protection, honeypot handling, private export, CSV formula escaping, and logout. Security regressions also cover spoofed forwarding headers, independent client limits, IPv6 address rotation, concurrent capacity enforcement, session-secret/password rotation, upgrade cleanup, and multi-batch CSV completeness. Both integration suites are enabled in CI. Never point `TEST_DATABASE_URL` at a live visitor database.
 
 Browser checks cover tablet portrait/landscape layouts, fullscreen entry/exit, actual registration, automatic reset, abandoned-form warning/extension/reset, and a failed network request with retryable input. Timer checks use a controlled browser clock. Browser viewport checks do not establish physical iPad/Safari acceptance.
+
+A clean Vercel deployment with a Neon Free database was tested on October 7, 2026: automatic schema creation, host access, saved customization, kiosk and phone check-in, consent preservation, QR decoding, CSV export, record deletion, closed-event rejection, and client-isolated rate limits. The Deploy button was exercised through repository/project creation and database provisioning; credentials and the final deployment were submitted through the Vercel API. A complete fresh-account browser-only install, physical iPad testing, and live Render deployment remain unverified.
 
 ## Contributing
 
