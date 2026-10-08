@@ -7,6 +7,7 @@ use url::Url;
 #[derive(Clone)]
 pub struct Config {
     pub database_url: String,
+    pub migration_database_url: String,
     pub password_hash: String,
     pub base_url: String,
     pub secure_cookie: bool,
@@ -50,6 +51,7 @@ impl Config {
             );
         }
         let mut config = Self {
+            migration_database_url: database_url.clone(),
             database_url,
             password_hash: digest(password),
             base_url: parsed.origin().ascii_serialization(),
@@ -90,6 +92,9 @@ impl Config {
             })
             .unwrap_or_else(|_| "http://localhost:3030".into());
         let mut config = Self::new(database_url, &password, &session_secret, &base)?;
+        if let Ok(direct_url) = env::var("DATABASE_URL_UNPOOLED") {
+            config.migration_database_url = direct_url;
+        }
         config.client_ip = ClientIpSource::from_env()?;
         for (name, value) in [
             ("MAX_VISITORS_PER_EVENT", &mut config.event_capacity),
